@@ -1,0 +1,45 @@
+# Generated binaries and distributions
+/build/
+/dist/
+/runtime/
+*.exe
+*.dll
+*.pdb
+*.map
+*.zip
+*.whl
+node_modules/
+/vendor/timetree-mcp/dist/
+/vendor/timetree-mcp/.test-dist/
+
+# Local accounts, caches, logs and machine settings
+.env
+.env.*
+!.env.example
+*.bin
+*.pem
+*.key
+*.pfx
+*.log
+*.lnk
+cache/
+settings*.json
+todo-panel.json
+connection-status.json
+standalone.json
+*service-account*.json
+*credentials*.json
+
+# Python and editor state
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.vscode/
+.idea/
+
+# QA outputs are local; only explicit fixtures and test sources belong in git
+/qa/*-result.json
+/qa/*-test.json
+/qa/*.png
+/qa/*.settings*.json

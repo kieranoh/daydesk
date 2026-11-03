@@ -1,0 +1,14 @@
+{
+  "view": "month",
+  "width": 960,
+  "height": 700,
+  "autostart": true,
+  "background_transparency": 65,
+  "pin": false,
+  "sync_minutes": 30,
+  "todo_width": 300,
+  "todo": {
+    "ShowAllCategories": false,
+    "HiddenGoals": []
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "timetree-mcp",
+  "version": "0.7.0",
+  "description": "Unofficial TimeTree MCP Server for personal use - access and manage TimeTree calendar data with MCP-compatible AI clients",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "timetree-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:build": "node -e \"require('node:fs').rmSync('.test-dist',{recursive:true,force:true})\" && tsc --outDir .test-dist --rootDir src --declaration false --declarationMap false --sourceMap false",
+    "test": "npm run build && npm run test:build && node --test tests/*.test.mjs",
+    "verify": "npm run typecheck && npm test && npm audit --audit-level=high"
+  },
+  "keywords": [
+    "mcp",
+    "timetree",
+    "calendar",
+    "claude",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "esbuild": "^0.28.2"
+  }
+}
