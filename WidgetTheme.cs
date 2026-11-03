@@ -100,7 +100,7 @@ static class WidgetTheme {
     <Border x:Name='Frame' CornerRadius='6' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='1'>
      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width='34'/></Grid.ColumnDefinitions>
       <DatePickerTextBox x:Name='PART_TextBox' Foreground='{TemplateBinding Foreground}' CaretBrush='#2ECC87' Background='Transparent' BorderThickness='0' Padding='9,6' VerticalContentAlignment='Center'>
-       <DatePickerTextBox.Template><ControlTemplate TargetType='{x:Type DatePickerTextBox}'><ScrollViewer x:Name='PART_ContentHost' Margin='{TemplateBinding Padding}'/></ControlTemplate></DatePickerTextBox.Template>
+       <DatePickerTextBox.Template><ControlTemplate TargetType='{x:Type DatePickerTextBox}'><ScrollViewer x:Name='PART_ContentHost'/></ControlTemplate></DatePickerTextBox.Template>
       </DatePickerTextBox>
       <Button x:Name='PART_Button' Grid.Column='1' Focusable='False' Background='Transparent' Foreground='#D5E3E8' BorderThickness='0' Content='▦' FontSize='18'>
        <Button.Template><ControlTemplate TargetType='{x:Type Button}'><Border Background='Transparent' CornerRadius='6'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border></ControlTemplate></Button.Template>
@@ -115,14 +115,14 @@ static class WidgetTheme {
  <Style TargetType='{x:Type TextBox}'>
   <Setter Property='Background' Value='#14FFFFFF'/><Setter Property='Foreground' Value='#F4F8FC'/><Setter Property='CaretBrush' Value='#2ECC87'/><Setter Property='BorderBrush' Value='#45C7E3F8'/><Setter Property='BorderThickness' Value='1'/><Setter Property='Padding' Value='9,6'/><Setter Property='SelectionBrush' Value='#502ECC87'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type TextBox}'>
-   <Border x:Name='Frame' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='6' Padding='{TemplateBinding Padding}'><ScrollViewer x:Name='PART_ContentHost'/></Border>
+    <Border x:Name='Frame' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='6'><ScrollViewer x:Name='PART_ContentHost'/></Border>
    <ControlTemplate.Triggers><Trigger Property='IsKeyboardFocusWithin' Value='True'><Setter TargetName='Frame' Property='BorderBrush' Value='#2ECC87'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.5'/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType='{x:Type PasswordBox}'>
   <Setter Property='Background' Value='#14FFFFFF'/><Setter Property='Foreground' Value='#F4F8FC'/><Setter Property='CaretBrush' Value='#2ECC87'/><Setter Property='BorderBrush' Value='#45C7E3F8'/><Setter Property='BorderThickness' Value='1'/><Setter Property='Padding' Value='9,6'/><Setter Property='SelectionBrush' Value='#502ECC87'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type PasswordBox}'>
-   <Border x:Name='Frame' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='6' Padding='{TemplateBinding Padding}'><ScrollViewer x:Name='PART_ContentHost'/></Border>
+    <Border x:Name='Frame' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='6'><ScrollViewer x:Name='PART_ContentHost'/></Border>
    <ControlTemplate.Triggers><Trigger Property='IsKeyboardFocusWithin' Value='True'><Setter TargetName='Frame' Property='BorderBrush' Value='#2ECC87'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.5'/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>

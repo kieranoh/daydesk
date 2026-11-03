@@ -115,6 +115,56 @@ class TreeWriteTests(unittest.TestCase):
         value=backend.model_for([event],[],date(2026,11,3),'month')['events'][0]
         self.assertEqual(value['id'],event['uuid']); self.assertEqual(value['source_start'],event['start_at'])
 
+    def cache_request(self,legacy=False):
+        labels=[{'id':2,'name':'샘플 라벨','color':0x2ecc87}]
+        model=backend.model_for([self.client.event],labels,date(2026,11,3),'month')
+        if legacy:
+            model.pop('labels')
+            for event in model['events']: event.pop('edit_version')
+        cache_store.write('timetree','calendar-a|2026-11',dict(model=model,warning=''))
+        return dict(action='event-form',calendar_id='calendar-a',date='2026-11-03',event=model['events'][0])
+
+    def test_cached_editor_opens_without_starting_connection(self):
+        request=self.cache_request()
+        with patch.object(tree,'TimeTree') as Client:
+            info=tree.run(request)
+        Client.assert_not_called()
+        self.assertEqual(info['form'],tree.form_for(self.client.event))
+        self.assertEqual(info['version'],tree.version(self.client.event))
+        self.assertEqual(info['labels'][0]['name'],'샘플 라벨')
+
+    def test_legacy_cached_editor_does_not_wait_for_labels(self):
+        request=self.cache_request(legacy=True)
+        with patch.object(tree,'TimeTree') as Client:
+            info=tree.run(request)
+        Client.assert_not_called()
+        self.assertFalse(info['labels_cached'])
+        self.assertEqual(info['form'],tree.form_for(self.client.event))
+        info.update(action='event-update',calendar_id='calendar-a')
+        info['form']['title']='새 제목'
+        with patch.object(tree,'refresh_cached',return_value=''): tree.perform(self.client,info)
+        self.assertEqual(self.writes()[0][1]['title'],'새 제목')
+
+    def test_legacy_cached_editor_rejects_remote_changes(self):
+        info=tree.cached_event_form(self.cache_request(legacy=True))
+        info.update(action='event-update',calendar_id='calendar-a')
+        info['form']['title']='새 제목'; self.client.event['note']='다른 기기에서 수정'
+        with self.assertRaisesRegex(tree.InputError,'다른 곳'): tree.perform(self.client,info)
+        self.assertEqual(self.writes(),[])
+
+    def test_cached_all_day_end_and_recurring_occurrence_are_preserved(self):
+        self.client.event.update(all_day=True,start_at='2026-11-03T00:00:00Z',end_at='2026-11-05T00:00:00Z',has_recurrence=True)
+        info=tree.cached_event_form(self.cache_request())
+        self.assertEqual(info['form'],tree.form_for(self.client.event))
+        self.assertEqual(info['event']['source_start'],self.client.event['start_at'])
+        self.assertTrue(info['recurring'])
+
+    def test_missing_cache_fetches_fresh_form(self):
+        with patch.object(tree,'TimeTree',return_value=self.client),patch.object(self.client,'start',create=True),patch.object(self.client,'close',create=True):
+            info=tree.run(dict(action='event-form',calendar_id='calendar-a',date='2026-11-03',event={'uuid':'fixture-uuid'}))
+        self.assertEqual(info['form'],tree.form_for(self.client.event))
+        self.assertEqual(len(self.client.calls),2)
+
     def test_cli_write_options_and_delete_confirmation(self):
         p=daydesk.parser()
         args=p.parse_args(['timetree','add','--title','회의','--start','2026-11-05T09:00','--end','2026-11-05T10:00'])

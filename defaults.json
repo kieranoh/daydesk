@@ -5,6 +5,7 @@
   "autostart": true,
   "background_transparency": 65,
   "pin": false,
+  "pin_back": false,
   "sync_minutes": 30,
   "todo_width": 300,
   "todo": {

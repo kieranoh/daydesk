@@ -14,16 +14,20 @@ sealed class TreeEventDialog : Window {
     internal DateTime SavedDate;
     internal string SaveWarning;
     internal bool Attempted;
+    internal Action<object> UpdateLabels;
     bool saving;
     static string Text(D d,string key) { object value; return d.TryGetValue(key,out value) && value!=null ? Convert.ToString(value,CultureInfo.InvariantCulture) : ""; }
     internal TreeEventDialog(D info,Func<D,Task<D>> write,bool deleteIntent=false) {
         var form=(D)info["form"]; bool adding=info["event"]==null,recurring=Equals(info["recurring"],true);
         var fields=new StackPanel();
-        var title=new TextBox { Text=Text(form,"title"),FontSize=17,Height=38,Padding=new Thickness(2,6,2,6),Background=System.Windows.Media.Brushes.White,BorderThickness=new Thickness(0,0,0,1) };
+        var title=new TextBox { Text=Text(form,"title"),FontSize=17,MinHeight=38,VerticalContentAlignment=VerticalAlignment.Center,Padding=new Thickness(2,6,2,6),Background=System.Windows.Media.Brushes.White,BorderThickness=new Thickness(0,0,0,1) };
         var titleRow=new DockPanel { Margin=new Thickness(0,0,0,12) }; titleRow.Children.Add(new Label { Content="제목",Target=title,Width=36,Padding=new Thickness(0),Foreground=Theme.Muted,VerticalAlignment=VerticalAlignment.Center }); titleRow.Children.Add(title); fields.Children.Add(titleRow); AutomationProperties.SetName(title,"일정 제목");
         var labels=new ComboBox { Height=34 }; CalendarWindow.StyleCalendarSelector(labels,true);
         int selectedLabel=Convert.ToInt32(form["label_id"]);
-        foreach(D label in ((IEnumerable)info["labels"]).Cast<D>()) {
+        bool fillingLabels=false;
+        UpdateLabels=delegate(object values) {
+        fillingLabels=true; labels.Items.Clear();
+        foreach(D label in ((IEnumerable)values).Cast<D>()) {
             object color; if(!label.TryGetValue("color",out color) || color==null) label.TryGetValue("default_color",out color);
             int id=Convert.ToInt32(label["id"]); string name=string.IsNullOrWhiteSpace(Text(label,"name")) ? "라벨 "+id : Text(label,"name");
             var line=new StackPanel { Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Left };
@@ -32,10 +36,11 @@ sealed class TreeEventDialog : Window {
             var item=new ComboBoxItem { Content=line,Tag=id,ToolTip=name,HorizontalContentAlignment=HorizontalAlignment.Left }; AutomationProperties.SetName(item,name); labels.Items.Add(item);
             if(id==selectedLabel) labels.SelectedItem=item;
         }
-        if(labels.Items.Count==0) labels.Items.Add(new ComboBoxItem { Content="기본 라벨",Tag=selectedLabel });
-        if(labels.SelectedIndex<0) labels.SelectedIndex=0;
-        selectedLabel=Convert.ToInt32(((ComboBoxItem)labels.SelectedItem).Tag);
-        labels.SelectionChanged+=delegate { selectedLabel=Convert.ToInt32(((ComboBoxItem)labels.SelectedItem).Tag); };
+        if(labels.SelectedIndex<0) { var current=new ComboBoxItem { Content="라벨 "+selectedLabel,Tag=selectedLabel }; labels.Items.Add(current); labels.SelectedItem=current; }
+        fillingLabels=false;
+        };
+        UpdateLabels(info["labels"]);
+        labels.SelectionChanged+=delegate { if(!fillingLabels && labels.SelectedItem!=null) selectedLabel=Convert.ToInt32(((ComboBoxItem)labels.SelectedItem).Tag); };
         var labelRow=new DockPanel { Margin=new Thickness(0,0,0,12) }; labelRow.Children.Add(new Label { Content="라벨",Target=labels,Width=36,Padding=new Thickness(0),Foreground=Theme.Muted,VerticalAlignment=VerticalAlignment.Center }); labelRow.Children.Add(labels); fields.Children.Add(labelRow); AutomationProperties.SetName(labels,"캘린더 라벨");
         var dates=new StackPanel(); fields.Children.Add(new Border { Background=Theme.Brush("#F7FAF8"),CornerRadius=new CornerRadius(10),Padding=new Thickness(12),Margin=new Thickness(0,0,0,14),Child=dates });
         var dateHeading=new DockPanel { Margin=new Thickness(0,0,0,8) }; dates.Children.Add(dateHeading);
@@ -83,6 +88,7 @@ sealed class TreeEventDialog : Window {
             var request=new D { {"action",removing ? "event-delete" : adding ? "event-add" : "event-update"},{"event",info["event"]},{"version",info["version"]},{"confirm_delete",removing},
                 {"form",new D { {"title",title.Text},{"all_day",allDay.IsChecked==true},{"start_date",start.SelectedDate.HasValue ? start.SelectedDate.Value.ToString("yyyy-MM-dd") : ""},{"end_date",end.SelectedDate.HasValue ? end.SelectedDate.Value.ToString("yyyy-MM-dd") : ""},
                     {"start_time",startTime.Text},{"end_time",endTime.Text},{"label_id",selectedLabel},{"location",location.Text},{"note",note.Text},{"url",url.Text} }} };
+            if(info.ContainsKey("original_form")) request["original_form"]=info["original_form"];
             saving=true; Attempted=true; fields.IsEnabled=save.IsEnabled=cancel.IsEnabled=delete.IsEnabled=false; message.Text=removing ? "삭제 중…" : "저장 중…";
             try {
                 var result=await write(request); SavedDate=DateTime.ParseExact(Text(result,"date"),"yyyy-MM-dd",CultureInfo.InvariantCulture); SaveWarning=Text(result,"cache_warning");
@@ -107,14 +113,18 @@ public partial class CalendarWindow {
         calendarEditing=true; TreeEventDialog dialog=null; string target=calendarId;
         try {
             status.Text="일정 편집 정보를 불러오는 중…";
-            var info=await RunTreeRequest(new D { {"action","event-form"},{"calendar_id",target},{"event",item},{"date",selected.ToString("yyyy-MM-dd")} });
+            var info=await RunTreeRequest(new D { {"action","event-form"},{"calendar_id",target},{"event",item},{"date",selected.ToString("yyyy-MM-dd")},{"anchor",anchor.ToString("yyyy-MM-dd")} });
             dialog=new TreeEventDialog(info,request=> { request["calendar_id"]=target; return RunTreeRequest(request); },deleteIntent) { Owner=this };
+            if(info.ContainsKey("labels_cached") && !B(info,"labels_cached")) dialog.Loaded+=async delegate {
+                try { var labels=await RunTreeRequest(new D { {"action","event-labels"},{"calendar_id",target} }); if(dialog.IsVisible) dialog.UpdateLabels(labels["labels"]); }
+                catch { if(dialog.IsVisible) status.Text="라벨을 불러오지 못했습니다. 현재 라벨은 유지됩니다."; }
+            };
             bool saved=dialog.ShowDialog()==true;
             calendarEditing=false;
             if(saved) { selected=anchor=dialog.SavedDate; expandedWeekStart=null; Refresh(!string.IsNullOrEmpty(dialog.SaveWarning)); if(!string.IsNullOrEmpty(dialog.SaveWarning)) status.Text=dialog.SaveWarning; }
             else if(dialog.Attempted) Refresh(true);
             else status.Text="";
         } catch(Exception error) { status.Text=error.Message; }
-        finally { calendarEditing=false; }
+        finally { calendarEditing=false; PlaceBehind(); }
     }
 }

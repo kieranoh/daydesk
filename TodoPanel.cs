@@ -193,7 +193,7 @@ sealed class TodoPanel : UserControl, IDisposable {
         }
         return panel;
     }
-    static ToggleButton CategorySwitch(string label,bool enabled,Action<bool> change,Brush accent) {
+    internal static ToggleButton CategorySwitch(string label,bool enabled,Action<bool> change,Brush accent) {
             var toggle=new ToggleButton { IsChecked=enabled,ToolTip=label };
             Theme.StyleButton(toggle,label+" 카테고리 표시"); toggle.Padding=new Thickness(10,8,10,8); toggle.FontSize=12; toggle.HorizontalContentAlignment=HorizontalAlignment.Stretch;
             var row=new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width=GridLength.Auto }); row.ColumnDefinitions.Add(new ColumnDefinition { Width=GridLength.Auto });

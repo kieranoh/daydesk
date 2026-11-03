@@ -1,5 +1,6 @@
 """Read-only TimeTree desktop calendar. Python standard library only."""
 import calendar
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,10 @@ KST = timezone(timedelta(hours=9))
 GREEN, INK, MUTED, LINE = "#2ECC87", "#242424", "#727272", "#E8E8E8"
 PALETTE = ["#2ecc87", "#3dc2c8", "#47b2f7", "#948078", "#212121",
            "#e73b3b", "#f35f8c", "#fb7f77", "#fdc02d", "#b38bdc"]
+
+
+def event_version(event):
+    return hashlib.sha256(json.dumps(event,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
 
 
 def contrast(first, second):

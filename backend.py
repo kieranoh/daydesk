@@ -6,13 +6,14 @@ import threading
 from datetime import timezone
 import cache_store
 from datetime import date, datetime, timedelta
-from calendar_data import TimeTree, ConnectionError, KST, PALETTE, event_span, event_style, visible_days, month_layout, events_on, lanes
+from calendar_data import TimeTree, ConnectionError, KST, PALETTE, event_span, event_style, visible_days, month_layout, events_on, lanes, event_version
 
 
 def load_events(client, calendar_id, start, end, source=None):
     source = {} if source is None else source
     if "labels" not in source:
         source["labels"] = client.call("get_calendar_labels", calendar_id=calendar_id)["labels"]
+        cache_store.write("timetree",calendar_id+"|labels",{"labels":source["labels"]})
     if "master" not in source:
         source["master"] = client.call("get_events", calendar_id=calendar_id, include_memos=False, expand_recurring=False)["events"]
     labels, master = source["labels"], source["master"]
@@ -42,7 +43,7 @@ def model_for(events, labels, anchor, view):
         background, foreground = event_style(event, color)
         normalized[id(event)] = dict(id=event.get("uuid") or event.get("id"),uuid=event.get("uuid"),source_start=event["start_at"],has_recurrence=bool(event.get("has_recurrence")),label_id=event.get("label_id"),title=event["title"],start=start.isoformat(),end=end.isoformat(),
             all_day=event["all_day"], color=color, background=background, foreground=foreground,
-            location=event.get("location") or "", note=event.get("note") or "", url=event.get("url") or "")
+            location=event.get("location") or "", note=event.get("note") or "", url=event.get("url") or "",edit_version=event_version(event))
     days = visible_days(anchor, view)
     weeks = []
     if view == "month":
@@ -63,7 +64,7 @@ def model_for(events, labels, anchor, view):
                     items.append((a, max(a + .6, b), event))
             blocks.extend(dict(column=column, start=a, end=b, lane=lane, count=count, event=normalized[id(e)])
                           for a, b, e, lane, count in lanes(items))
-    return dict(days=[d.isoformat() for d in days], weeks=weeks, blocks=blocks, events=list(normalized.values()),
+    return dict(days=[d.isoformat() for d in days], weeks=weeks, blocks=blocks, events=list(normalized.values()),labels=labels,
                 period=f"{anchor.year}년 {anchor.month}월" if view == "month" else f"{days[0]:%Y.%m.%d} – {days[-1]:%m.%d}")
 
 

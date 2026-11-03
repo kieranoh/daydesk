@@ -97,6 +97,15 @@ class DaydeskTests(unittest.TestCase):
                 daydesk.run(daydesk.parser().parse_args(["settings","--recommended","--todo-width","400"]))
             control.assert_not_called()
 
+    def test_back_pin_cli_and_mutual_exclusion(self):
+        with patch.object(daydesk,'control',return_value={}) as control:
+            daydesk.run(daydesk.parser().parse_args(['settings','--pin-back','on']))
+            control.assert_called_once_with({'op':'settings','pin_back':True},launch=True)
+        with patch.object(daydesk,'control') as control:
+            for options in (['--pin','on','--pin-back','on'],['--recommended','--pin-back','on']):
+                with self.assertRaises(ValueError): daydesk.run(daydesk.parser().parse_args(['settings',*options]))
+            control.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

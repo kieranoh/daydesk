@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Automation;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using D=System.Collections.Generic.Dictionary<string,object>;
 
 static class DialogPreview {
@@ -21,7 +22,19 @@ static class DialogPreview {
         date.UpdateLayout(); var input=(DatePickerTextBox)date.Template.FindName("PART_TextBox",date);
         Check(input.ViewportWidth>=100 && input.ExtentWidth<=input.ViewportWidth+1,"Date text was clipped");
     }
+    static void CheckTitle(Window window) {
+        var input=Children<TextBox>(window).Single(b=>AutomationProperties.GetName(b)=="일정 제목");
+        input.Text="예시 일정: 한글 Agpq 123"; input.CaretIndex=0; window.UpdateLayout();
+        var host=(ScrollViewer)input.Template.FindName("PART_ContentHost",input);
+        Check(host.ExtentHeight<=host.ViewportHeight+.5,"Title text was clipped vertically");
+        var first=input.GetRectFromCharacterIndex(0);
+        Check(first.Top>=0 && first.Bottom<=input.ActualHeight+.5,"Title glyph was outside its input");
+    }
     [STAThread] static void Main(string[] args) {
+        try { Run(args); }
+        catch(Exception error) { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"dialog-error.txt"),error.ToString()); Environment.ExitCode=1; }
+    }
+    static void Run(string[] args) {
         Environment.SetEnvironmentVariable("DAYDESK_DATA_DIR",Path.Combine(Path.GetTempPath(),"daydesk-dialog-preview"));
         var assembly=Assembly.LoadFrom(args[0]);
         var goalType=assembly.GetType("Goal"); var goal=Activator.CreateInstance(goalType,true);
@@ -38,6 +51,7 @@ static class DialogPreview {
         todo.Show(); tree.Show();
         if(args.Length>1 && args[1]=="--check") {
             todo.UpdateLayout(); tree.UpdateLayout();
+            CheckTitle(tree);
             var content=Children<TextBox>(todo).Single(b=>AutomationProperties.GetName(b)=="할 일 내용");
             Check(content.MinLines==1 && content.MaxLines==3 && content.ActualHeight<44,"Task editor is not compact");
             Check(Children<CheckBox>(todo).Count()==1 && Children<CheckBox>(todo).All(b=>Convert.ToString(b.Content)=="알림 설정"),"Completion checkbox remained in composer");
@@ -55,6 +69,11 @@ static class DialogPreview {
             Children<CheckBox>(tree).Single().IsChecked=false; tree.UpdateLayout();
             foreach(var date in Children<DatePicker>(tree)) CheckDate(date);
             foreach(var time in Children<TextBox>(tree).Where(b=>AutomationProperties.GetName(b).Contains("HH:mm"))) Check(time.ExtentWidth<=time.ViewportWidth+1,"Time text was clipped");
+            var title=Children<TextBox>(tree).Single(b=>AutomationProperties.GetName(b)=="일정 제목");
+            foreach(double fontSize in new[]{17.0,21.0,25.0}) { title.FontSize=fontSize; CheckTitle(tree); }
+            title.FontSize=17; tree.UpdateLayout();
+            var image=new RenderTargetBitmap((int)tree.ActualWidth,(int)tree.ActualHeight,96,96,PixelFormats.Pbgra32); image.Render(tree);
+            var png=new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image)); using(var file=File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"tree-dialog-preview.png"))) png.Save(file);
             File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"dialog-layout-result.json"),new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(new { passed=true,todoHeight=todo.ActualHeight,treeHeight=tree.ActualHeight,oneLineComposer=true,noCompletionCheckbox=true,dateAndTimeNotClipped=true,weekdayLabels=weekdays }));
             todo.Close(); tree.Close(); return;
         }

@@ -1,11 +1,9 @@
 """TimeTree writes with validation, occurrence scope and shared encrypted cache refresh."""
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
-import hashlib
-import json
 
 import cache_store
-from calendar_data import TimeTree, ConnectionError, KST, event_span, stamp, visible_days
+from calendar_data import TimeTree, ConnectionError, KST, event_span, stamp, visible_days, event_version as version
 from backend import load_events, model_for, month_at
 
 
@@ -21,8 +19,27 @@ def form_for(event):
         label_id=event.get('label_id') or 1,note=event.get('note') or '',location=event.get('location') or '',url=event.get('url') or '')
 
 
-def version(event):
-    return hashlib.sha256(json.dumps(event,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+def cached_event_form(request):
+    calendar_id=request['calendar_id']
+    anchor=date.fromisoformat(request.get('anchor') or request['date'])
+    saved=cache_store.read('timetree',f'{calendar_id}|{anchor:%Y-%m}')
+    if not saved: return None
+    model=saved[0].get('model',{})
+    key=request.get('event')
+    if key:
+        matches=[e for e in model.get('events',[]) if (e.get('uuid') or e.get('id'))==(key.get('uuid') or key.get('id')) and e.get('source_start')==key.get('source_start')]
+        if len(matches)!=1: return None
+        event=matches[0]
+        end=stamp(event['end'])-timedelta(days=1) if event['all_day'] else stamp(event['end'])
+        form=form_for(dict(event,start_at=event['start'],end_at=end.isoformat(),start_timezone='Asia/Seoul',end_timezone='Asia/Seoul'))
+        result=dict(form=form,event=dict(uuid=event.get('uuid') or event['id'],source_start=event['source_start']),version=event.get('edit_version',''),original_form=form.copy(),recurring=bool(event.get('has_recurrence')))
+    else:
+        day=date.fromisoformat(request['date']).isoformat()
+        result=dict(form=dict(title='',all_day=True,start_date=day,end_date=day,start_time='09:00',end_time='10:00',label_id=1,note='',location='',url=''),event=None,version='',recurring=False)
+    labels=cache_store.read('timetree',calendar_id+'|labels')
+    labels=labels[0]['labels'] if labels else model.get('labels')
+    result.update(labels=labels or [],labels_cached=labels is not None,cached=True)
+    return result
 
 
 def find_event(client,calendar_id,key):
@@ -120,7 +137,8 @@ def perform(client,request):
         original=None
         if action!='event-add':
             original=find_event(client,calendar_id,request.get('event'))
-            if request.get('version')!=version(original): raise InputError('다른 곳에서 변경된 일정입니다. 편집창을 다시 열어 최신 내용을 확인해 주세요.')
+            if (request.get('version')!=version(original) if request.get('version') else request.get('original_form')!=form_for(original)):
+                raise InputError('다른 곳에서 변경된 일정입니다. 새로고침한 뒤 편집창을 다시 열어 주세요.')
             identity=dict(calendar_id=calendar_id,event_uuid=original['uuid'])
             recurring=bool(original.get('has_recurrence'))
             if recurring: identity.update(occurrence_start_at=original['start_at'],scope='this')
@@ -152,8 +170,16 @@ def perform(client,request):
 
 
 def run(request):
+    if request.get('action')=='event-form':
+        try: cached=cached_event_form(request)
+        except (KeyError,TypeError,ValueError): cached=None
+        if cached is not None: return cached
     client=TimeTree()
     try:
         client.start()
+        if request.get('action')=='event-labels':
+            labels=client.call('get_calendar_labels',calendar_id=request['calendar_id'])['labels']
+            cache_store.write('timetree',request['calendar_id']+'|labels',dict(labels=labels))
+            return dict(labels=labels)
         return perform(client,request)
     finally: client.close()

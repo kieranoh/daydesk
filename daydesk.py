@@ -78,6 +78,7 @@ def parser():
     settings = sub.add_parser("settings", help="설정 조회/변경; 실행 중인 화면에도 즉시 반영")
     settings.add_argument("--transparency", type=transparency, help="배경 투명도 0~95; 유리빛 65, 선명하게 45")
     settings.add_argument("--pin", choices=("on", "off"), help="항상 위에 표시")
+    settings.add_argument("--pin-back", choices=("on", "off"), help="다른 프로그램 뒤로 고정")
     settings.add_argument("--sync-minutes", type=int, choices=(0,15,30,60), help="두 서비스 자동 동기화 간격; 0은 수동 새로고침만")
     settings.add_argument("--todo-width", type=todo_width, metavar="260~600", help="Todo Mate 영역의 가로 폭(px)")
     settings.add_argument("--recommended", action="store_true", help="저장된 추천 설정으로 즉시 복원")
@@ -355,21 +356,23 @@ def run(args):
         if args.action == "editor":
             return control({"op": "editor", "task": args.task}, launch=True)
         return todo_command(args)
-    if args.command == "settings" and args.recommended and any(getattr(args,k) is not None for k in ("transparency","pin","sync_minutes","todo_width")):
+    if args.command == "settings" and args.pin=='on' and args.pin_back=='on':
+        raise ValueError("항상 위와 가장 뒤 고정은 동시에 켤 수 없습니다.")
+    if args.command == "settings" and args.recommended and any(getattr(args,k) is not None for k in ("transparency","pin","pin_back","sync_minutes","todo_width")):
         raise ValueError("추천 설정은 다른 설정 옵션과 함께 적용할 수 없습니다.")
-    if args.command == "status" or (args.command == "settings" and not args.recommended and all(getattr(args, k) is None for k in ("transparency", "pin", "sync_minutes","todo_width"))):
+    if args.command == "status" or (args.command == "settings" and not args.recommended and all(getattr(args, k) is None for k in ("transparency", "pin", "pin_back","sync_minutes","todo_width"))):
         try:
             state = rpc({"op": "status"})
         except FileNotFoundError:
             prefs = saved()
             state = {"running": False, "view": "month",
-                     "transparency": prefs.get("background_transparency", 65), "pin": prefs.get("pin", False),"sync_minutes":prefs.get("sync_minutes",30),"todo_width":prefs.get("todo_width",300)}
+                     "transparency": prefs.get("background_transparency", 65), "pin": prefs.get("pin", False),"pin_back":prefs.get("pin_back",False),"sync_minutes":prefs.get("sync_minutes",30),"todo_width":prefs.get("todo_width",300)}
         return state | startup("status")
     request = {"op": args.command}
-    for key in ("date", "transparency", "pin", "sync_minutes","todo_width"):
+    for key in ("date", "transparency", "pin", "pin_back", "sync_minutes","todo_width"):
         value = getattr(args, key, None)
         if value is not None:
-            request[key] = (value == "on") if key == "pin" else value
+            request[key] = (value == "on") if key in ("pin","pin_back") else value
     if getattr(args,"recommended",False):
         request["recommended"]=True
     result = control(request, launch=args.command in ("open", "settings"))
@@ -386,7 +389,7 @@ def display(value):
     if isinstance(value, dict) and "running" in value:
         rows = ["위젯: " + ("실행 중" if value["running"] else "종료됨"),
                 "보기: " + {"month": "월간", "week": "주간"}.get(value["view"], value["view"]),
-                f"배경 투명도: {value['transparency']:g}%", "항상 위: " + ("켜짐" if value["pin"] else "꺼짐")]
+                f"배경 투명도: {value['transparency']:g}%", "항상 위: " + ("켜짐" if value["pin"] else "꺼짐"),"가장 뒤 고정: "+("켜짐" if value.get("pin_back") else "꺼짐")]
         if "date" in value:
             rows.append("선택 날짜: " + value["date"])
         if "autostart" in value:

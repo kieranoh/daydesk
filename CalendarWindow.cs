@@ -62,6 +62,24 @@ public partial class CalendarWindow : Window {
     Window settings;
     Action<bool> changeSettingsTab;
     bool closing, loading, awaitingInitialConnections;
+    bool pinBack;
+    ToggleButton backSwitch;
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
+    void PlaceBehind() {
+        if(!pinBack || closing || !IsLoaded || OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) return;
+        var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if(handle!=IntPtr.Zero) SetWindowPos(handle,new IntPtr(1),0,0,0,0,0x0013);
+    }
+    void SetWindowLayer(bool above,bool below) {
+        if(above && below) throw new ArgumentException("항상 위와 가장 뒤 고정은 동시에 켤 수 없습니다.");
+        bool wasBack=pinBack; pinBack=below; Topmost=above;
+        if(backSwitch!=null) backSwitch.IsChecked=below;
+        if(wasBack && !below && IsLoaded) {
+            var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            SetWindowPos(handle,new IntPtr(above ? -1 : -2),0,0,0,0,0x0013);
+        }
+        PlaceBehind(); ScheduleSave();
+    }
 
     static string S(D d, string key, string fallback = "") { object o; return d.TryGetValue(key, out o) && o != null ? Convert.ToString(o, CultureInfo.InvariantCulture) : fallback; }
     static double N(D d, string key, double fallback = 0) { double n; return Double.TryParse(S(d,key), NumberStyles.Float, CultureInfo.InvariantCulture, out n) && !Double.IsNaN(n) && !Double.IsInfinity(n) ? n : fallback; }
@@ -141,6 +159,7 @@ public partial class CalendarWindow : Window {
         prefs=AppPaths.Defaults();
         try { foreach(var item in Json.Deserialize<D>(File.ReadAllText(SettingsFile,Encoding.UTF8))) prefs[item.Key]=item.Value; } catch { }
         calendarId=S(prefs,"calendar_id"); Topmost=B(prefs,"pin");
+        pinBack=B(prefs,"pin_back") && !Topmost;
         int savedSync=(int)N(prefs,"sync_minutes",30); syncMinutes=new[]{0,15,30,60}.Contains(savedSync) ? savedSync : 30;
         nextSync=DateTime.UtcNow.AddMinutes(Math.Max(1,syncMinutes));
         backgroundTransparency=Math.Max(0,Math.Min(95,N(prefs,"background_transparency",65)));
@@ -166,6 +185,7 @@ public partial class CalendarWindow : Window {
         Grid.SetRow(header,0); layout.Children.Add(header);
         var controls=new StackPanel { Orientation=Orientation.Horizontal };
         DockPanel.SetDock(controls,Dock.Right); header.Children.Add(controls);
+        backSwitch=TodoPanel.CategorySwitch("뒤로 고정",pinBack,on=>SetWindowLayer(on ? false : Topmost,on),Theme.Green); backSwitch.ToolTip="다른 프로그램 뒤로 고정"; backSwitch.Margin=new Thickness(0,0,8,0); controls.Children.Add(backSwitch);
         controls.Children.Add(Btn("일정 추가",delegate { EditTree(); })); controls.Children.Add(Btn("새로고침",delegate { Refresh(true); todoPanel.Refresh(); })); controls.Children.Add(Btn("설정",delegate { ShowSettings(); }));
         var exit=Btn("×",Close); exit.ToolTip="위젯 종료"; AutomationProperties.SetName(exit,"위젯 종료"); controls.Children.Add(exit);
         brand.Foreground=new SolidColorBrush(Green); brand.Margin=new Thickness(0,0,18,0);
@@ -219,7 +239,9 @@ public partial class CalendarWindow : Window {
         Closing += delegate(object sender,System.ComponentModel.CancelEventArgs e) {
             if(!CanClose()) { e.Cancel=true; status.Text="할 일 저장을 마친 뒤 종료해 주세요."; }
         };
-        Activated += delegate { todoPanel.RefreshAfterBrowser(); };
+        Activated += delegate { todoPanel.RefreshAfterBrowser(); Dispatcher.BeginInvoke(new Action(PlaceBehind)); };
+        Deactivated+=delegate { Dispatcher.BeginInvoke(new Action(PlaceBehind)); };
+        Loaded+=delegate { PlaceBehind(); };
         Closed += delegate { closing=true; if(commands!=null) commands.Dispose(); autosync.Stop(); saveDelay.Stop(); Save(); todoPanel.Dispose(); StopBackend(); };
         SetTransparency(backgroundTransparency); UpdatePeriod(); ShowSelectedTodos();
         EnsureRecommended();
@@ -235,7 +257,7 @@ public partial class CalendarWindow : Window {
     }
     D State() {
         return new D { {"running",true},{"pid",Process.GetCurrentProcess().Id},{"date",selected.ToString("yyyy-MM-dd")},
-            {"view",view},{"transparency",backgroundTransparency},{"pin",Topmost},{"calendar_id",calendarId},
+            {"view",view},{"transparency",backgroundTransparency},{"pin",Topmost},{"pin_back",pinBack},{"calendar_id",calendarId},
             {"loading",loading},{"message",status.Text},{"sync_minutes",syncMinutes},{"todo_width",todoWidth} };
     }
     D HandleCommand(D request) {
@@ -248,17 +270,25 @@ public partial class CalendarWindow : Window {
         double alpha=N(request,"transparency",-1);
         if(request.ContainsKey("transparency") && (alpha<0 || alpha>95)) throw new ArgumentException("투명도는 0~95입니다.");
         if(request.ContainsKey("pin") && !(request["pin"] is bool)) throw new ArgumentException("pin은 true 또는 false입니다.");
+        if(request.ContainsKey("pin_back") && !(request["pin_back"] is bool)) throw new ArgumentException("pin_back은 true 또는 false입니다.");
+        if(B(request,"pin") && B(request,"pin_back")) throw new ArgumentException("항상 위와 가장 뒤 고정은 동시에 켤 수 없습니다.");
         int interval=(int)N(request,"sync_minutes",-1);
         if(request.ContainsKey("sync_minutes") && (!new[]{0,15,30,60}.Contains(interval) || N(request,"sync_minutes")!=interval)) throw new ArgumentException("동기화 간격은 0, 15, 30, 60분 중 하나입니다.");
         double pane=N(request,"todo_width",-1);
         if(request.ContainsKey("todo_width") && (pane<260 || pane>600)) throw new ArgumentException("Todo Mate 폭은 260~600px입니다.");
-        if(request.ContainsKey("recommended") && (!(request["recommended"] is bool) || (B(request,"recommended") && new[]{"transparency","pin","sync_minutes","todo_width"}.Any(request.ContainsKey)))) throw new ArgumentException("추천 설정은 다른 설정 옵션과 함께 적용할 수 없습니다.");
+        if(request.ContainsKey("recommended") && (!(request["recommended"] is bool) || (B(request,"recommended") && new[]{"transparency","pin","pin_back","sync_minutes","todo_width"}.Any(request.ContainsKey)))) throw new ArgumentException("추천 설정은 다른 설정 옵션과 함께 적용할 수 없습니다.");
         if(op=="close") { if(!CanClose()) throw new InvalidOperationException("할 일을 저장 중입니다. 저장을 마친 뒤 종료해 주세요."); return State(); }
         if(op=="open" || op=="settings") {
             bool redraw=request.ContainsKey("date") || request.ContainsKey("view");
             selected=day; if(redraw) { anchor=day; expandedWeekStart=null; ShowSelectedTodos(); UpdatePeriod(); Refresh(); }
             if(request.ContainsKey("transparency")) SetTransparency(alpha);
-            if(request.ContainsKey("pin")) Topmost=B(request,"pin");
+            if(request.ContainsKey("pin") || request.ContainsKey("pin_back")) {
+                bool above=request.ContainsKey("pin") ? B(request,"pin") : Topmost;
+                bool below=request.ContainsKey("pin_back") ? B(request,"pin_back") : pinBack;
+                if(B(request,"pin")) below=false;
+                if(B(request,"pin_back")) above=false;
+                SetWindowLayer(above,below);
+            }
             if(request.ContainsKey("sync_minutes")) SetSyncMinutes(interval);
             if(request.ContainsKey("todo_width")) SetTodoWidth(pane);
             if(B(request,"recommended")) ApplyRecommended();
@@ -317,7 +347,7 @@ public partial class CalendarWindow : Window {
         if(File.Exists(RecommendedFile)) return;
         try {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(RecommendedFile)); string temp=RecommendedFile+".tmp";
-            try { File.WriteAllText(temp,Json.Serialize(new { background_transparency=backgroundTransparency,pin=Topmost,sync_minutes=syncMinutes,todo_width=todoWidth,todo=todoPanel.PreferenceValues(),autostart=B(AppPaths.Defaults(),"autostart") }),new UTF8Encoding(false)); File.Move(temp,RecommendedFile); }
+            try { File.WriteAllText(temp,Json.Serialize(new { background_transparency=backgroundTransparency,pin=Topmost,pin_back=pinBack,sync_minutes=syncMinutes,todo_width=todoWidth,todo=todoPanel.PreferenceValues(),autostart=B(AppPaths.Defaults(),"autostart") }),new UTF8Encoding(false)); File.Move(temp,RecommendedFile); }
             finally { if(File.Exists(temp)) File.Delete(temp); }
         }
         catch { status.Text="현재 구성을 추천 설정으로 저장하지 못했습니다."; }
@@ -327,13 +357,13 @@ public partial class CalendarWindow : Window {
         double alpha=N(value,"background_transparency",-1),width=N(value,"todo_width",-1),minutes=N(value,"sync_minutes",-1); object pin,todo;
         if(alpha<0 || alpha>95 || width<260 || width>600 || !new[]{0.0,15.0,30.0,60.0}.Contains(minutes) || !value.TryGetValue("pin",out pin) || !(pin is bool) || !value.TryGetValue("todo",out todo) || !(todo is D)) throw new ArgumentException("추천 설정을 읽지 못했습니다.");
         todoPanel.RestorePreferences((D)todo);
-        SetTransparency(alpha); Topmost=(bool)pin; SetSyncMinutes((int)minutes); SetTodoWidth(width);
+        SetTransparency(alpha); SetWindowLayer((bool)pin,B(value,"pin_back") && !(bool)pin); SetSyncMinutes((int)minutes); SetTodoWidth(width);
         if(live && value.ContainsKey("autostart")) StartupState(B(value,"autostart") ? "on" : "off");
         if(!Save()) throw new IOException("추천 설정은 적용되었지만 저장하지 못했습니다.");
     }
     bool Save() {
         try {
-            prefs["view"]=view; prefs["calendar_id"]=calendarId; prefs["pin"]=Topmost;
+            prefs["view"]=view; prefs["calendar_id"]=calendarId; prefs["pin"]=Topmost; prefs["pin_back"]=pinBack;
             prefs["sync_minutes"]=syncMinutes;
             prefs["todo_width"]=todoWidth;
             prefs["background_transparency"]=backgroundTransparency; prefs.Remove("transparency");
@@ -561,7 +591,12 @@ public partial class CalendarWindow : Window {
         paneSlider.ValueChanged+=delegate { SetTodoWidth(paneSlider.Value); paneValue.Text="Todo Mate 폭 "+Math.Round(todoWidth)+"px"; };
         stack.Children.Add(new TextBlock { Text="달력과 할 일 사이 경계를 드래그해도 조절됩니다.",FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,14),Foreground=Brush("#C3D3E0") });
         var pin=new CheckBox { Content="항상 위에 표시", Foreground=new SolidColorBrush(Ink), IsChecked=Topmost, Margin=new Thickness(0,0,0,16) };
-        pin.Checked += delegate { Topmost=true; ScheduleSave(); }; pin.Unchecked += delegate { Topmost=false; ScheduleSave(); }; stack.Children.Add(pin);
+        stack.Children.Add(pin);
+        ToggleButton back=null;
+        pin.Click+=delegate { SetWindowLayer(pin.IsChecked==true,pin.IsChecked==true ? false : pinBack); back.IsChecked=pinBack; };
+        back=TodoPanel.CategorySwitch("가장 뒤로 고정",pinBack,on=> { SetWindowLayer(on ? false : Topmost,on); pin.IsChecked=Topmost; },Theme.Green); back.Margin=new Thickness(0,0,0,6); stack.Children.Add(back);
+        settings.Activated+=delegate { pin.IsChecked=Topmost; back.IsChecked=pinBack; };
+        stack.Children.Add(new TextBlock { Text="다른 프로그램 뒤에 표시합니다. 상단 토글로도 켜고 끌 수 있습니다.",TextWrapping=TextWrapping.Wrap,FontSize=12,Foreground=Brush("#C3D3E0"),Margin=new Thickness(0,0,0,16) });
         var startup=new CheckBox { Content="Windows 로그인 시 자동 실행",Margin=new Thickness(0,0,0,18) }; stack.Children.Add(startup);
         var startupLoad=LoadStartup(startup,notice);
         startup.Click+=async delegate { bool desired=startup.IsChecked==true; startup.IsEnabled=false; try { await Task.Run(()=>StartupState(desired ? "on" : "off")); } catch(Exception error) { startup.IsChecked=!desired; notice.Text=error.Message; } finally { startup.IsEnabled=true; } };
@@ -577,12 +612,12 @@ public partial class CalendarWindow : Window {
         stack.Children.Add(new TextBlock { Text="끔으로 설정한 카테고리는 전체 보기에서도 숨깁니다.",TextWrapping=TextWrapping.Wrap,FontSize=12,Foreground=Brush("#C3D3E0"),Margin=new Thickness(0,6,0,10) });
         var categorySettings=new ContentControl { Content=todoPanel.CategoryPreferences() }; stack.Children.Add(categorySettings);
         reset.Click+=delegate {
-            try { ApplyRecommended(); slider.Value=backgroundTransparency; pin.IsChecked=Topmost; paneSlider.Value=todoWidth; startup.IsChecked=StartupState("status"); value.Text="배경 투명도 "+Math.Round(backgroundTransparency)+"%"; paneValue.Text="Todo Mate 폭 "+Math.Round(todoWidth)+"px"; updateOptions(); categorySettings.Content=todoPanel.CategoryPreferences(); notice.Text="추천 설정을 적용했습니다."; }
+            try { ApplyRecommended(); slider.Value=backgroundTransparency; pin.IsChecked=Topmost; back.IsChecked=pinBack; paneSlider.Value=todoWidth; startup.IsChecked=StartupState("status"); value.Text="배경 투명도 "+Math.Round(backgroundTransparency)+"%"; paneValue.Text="Todo Mate 폭 "+Math.Round(todoWidth)+"px"; updateOptions(); categorySettings.Content=todoPanel.CategoryPreferences(); notice.Text="추천 설정을 적용했습니다."; }
             catch(Exception error) { notice.Text=error.Message; }
         };
         settings.KeyDown+=delegate(object sender,KeyEventArgs e) { if(e.Key==Key.Escape) settings.Close(); };
         settings.Closing+=delegate(object sender,System.ComponentModel.CancelEventArgs e) { if(connectionBusy) { e.Cancel=true; notice.Text="계정 연결 확인을 마친 뒤 닫아 주세요."; } };
-        settings.Closed += delegate { settings=null; changeSettingsTab=null; Save(); }; settings.Show();
+        settings.Closed += delegate { settings=null; changeSettingsTab=null; Save(); PlaceBehind(); }; settings.Show();
     }
 
     static BitmapSource Render(FrameworkElement element) {
@@ -717,6 +752,17 @@ public partial class CalendarWindow : Window {
         Check(!B(refused,"ok") && S(window.State(),"view")=="month","Removed weekly mode is still available through commands");
         var state=window.HandleCommand(new D { {"op","settings"},{"transparency",45},{"pin",false} });
         Check(N(state,"transparency")==45 && !B(state,"pin"),"CLI settings did not apply");
+        state=window.HandleCommand(new D { {"op","settings"},{"pin_back",true} });
+        Check(B(state,"pin_back") && !B(state,"pin") && window.backSwitch.IsChecked==true,"Back pin did not enable");
+        window.Save();
+        var restoredLayer=new CalendarWindow("",false);
+        Check(restoredLayer.pinBack && !restoredLayer.Topmost,"Back pin did not survive restart");
+        restoredLayer.Close();
+        state=window.HandleCommand(new D { {"op","settings"},{"pin",true} });
+        Check(B(state,"pin") && !B(state,"pin_back") && window.backSwitch.IsChecked==false,"Top pin did not release back pin");
+        refused=WidgetCommands.Execute(window.HandleCommand,new D { {"op","settings"},{"pin",true},{"pin_back",true} });
+        Check(!B(refused,"ok") && window.Topmost && !window.pinBack,"Conflicting layer settings partially applied");
+        window.SetWindowLayer(false,false);
         window.lastToday=window.selected=new DateTime(2026,11,3);
         Check(window.FollowToday(new DateTime(2026,11,4)) && window.selected==new DateTime(2026,11,4),"Midnight did not follow today");
         window.selected=new DateTime(2026,10,20); window.FollowToday(new DateTime(2026,11,5));
