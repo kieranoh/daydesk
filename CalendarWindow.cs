@@ -64,19 +64,41 @@ public partial class CalendarWindow : Window {
     bool closing, loading, awaitingInitialConnections;
     bool pinBack;
     ToggleButton backSwitch;
+    const uint KeepPositionNoActivate=0x0213; // Preserve position, size and owner order without taking focus.
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
+    [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr window,int index);
+    [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")] static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
+    [StructLayout(LayoutKind.Sequential)] struct WindowPosition { internal IntPtr Window,After; internal int X,Y,Width,Height; internal uint Flags; }
+    void UpdateBackActivation() {
+        ShowActivated=!pinBack;
+        var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if(handle==IntPtr.Zero) return;
+        long style=GetWindowLongPtr(handle,-20).ToInt64();
+        SetWindowLongPtr(handle,-20,new IntPtr(pinBack ? style|0x08000000L : style&~0x08000000L));
+    }
+    IntPtr BackWindowMessage(IntPtr window,int message,IntPtr wParam,IntPtr lParam,ref bool handled) {
+        if(!pinBack || closing) return IntPtr.Zero;
+        if(message==0x0021) { handled=true; return new IntPtr(3); } // MA_NOACTIVATE keeps the click usable.
+        if(message==0x0046 && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
+            var position=(WindowPosition)Marshal.PtrToStructure(lParam,typeof(WindowPosition));
+            if((position.Flags&0x0004)==0) position.After=new IntPtr(1);
+            position.Flags|=0x0210;
+            Marshal.StructureToPtr(position,lParam,false);
+        }
+        return IntPtr.Zero;
+    }
     void PlaceBehind() {
         if(!pinBack || closing || !IsLoaded || OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) return;
         var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        if(handle!=IntPtr.Zero) SetWindowPos(handle,new IntPtr(1),0,0,0,0,0x0013);
+        if(handle!=IntPtr.Zero) SetWindowPos(handle,new IntPtr(1),0,0,0,0,KeepPositionNoActivate);
     }
     void SetWindowLayer(bool above,bool below) {
         if(above && below) throw new ArgumentException("항상 위와 가장 뒤 고정은 동시에 켤 수 없습니다.");
-        bool wasBack=pinBack; pinBack=below; Topmost=above;
+        bool wasBack=pinBack; pinBack=below; UpdateBackActivation(); Topmost=above;
         if(backSwitch!=null) backSwitch.IsChecked=below;
         if(wasBack && !below && IsLoaded) {
             var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
-            SetWindowPos(handle,new IntPtr(above ? -1 : -2),0,0,0,0,0x0013);
+            SetWindowPos(handle,new IntPtr(above ? -1 : -2),0,0,0,0,KeepPositionNoActivate);
         }
         PlaceBehind(); ScheduleSave();
     }
@@ -160,6 +182,8 @@ public partial class CalendarWindow : Window {
         try { foreach(var item in Json.Deserialize<D>(File.ReadAllText(SettingsFile,Encoding.UTF8))) prefs[item.Key]=item.Value; } catch { }
         calendarId=S(prefs,"calendar_id"); Topmost=B(prefs,"pin");
         pinBack=B(prefs,"pin_back") && !Topmost;
+        ShowActivated=!pinBack;
+        SourceInitialized+=delegate { System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle).AddHook(BackWindowMessage); UpdateBackActivation(); };
         int savedSync=(int)N(prefs,"sync_minutes",30); syncMinutes=new[]{0,15,30,60}.Contains(savedSync) ? savedSync : 30;
         nextSync=DateTime.UtcNow.AddMinutes(Math.Max(1,syncMinutes));
         backgroundTransparency=Math.Max(0,Math.Min(95,N(prefs,"background_transparency",65)));
@@ -239,8 +263,7 @@ public partial class CalendarWindow : Window {
         Closing += delegate(object sender,System.ComponentModel.CancelEventArgs e) {
             if(!CanClose()) { e.Cancel=true; status.Text="할 일 저장을 마친 뒤 종료해 주세요."; }
         };
-        Activated += delegate { todoPanel.RefreshAfterBrowser(); Dispatcher.BeginInvoke(new Action(PlaceBehind)); };
-        Deactivated+=delegate { Dispatcher.BeginInvoke(new Action(PlaceBehind)); };
+        Activated += delegate { todoPanel.RefreshAfterBrowser(); };
         Loaded+=delegate { PlaceBehind(); };
         Closed += delegate { closing=true; if(commands!=null) commands.Dispose(); autosync.Stop(); saveDelay.Stop(); Save(); todoPanel.Dispose(); StopBackend(); };
         SetTransparency(backgroundTransparency); UpdatePeriod(); ShowSelectedTodos();
@@ -295,7 +318,7 @@ public partial class CalendarWindow : Window {
             if(settings!=null) settings.Close();
             if(!Save()) throw new IOException("설정은 적용되었지만 저장하지 못했습니다.");
         }
-        if(op=="open") { Show(); WindowState=WindowState.Normal; Activate(); }
+        if(op=="open") { Show(); WindowState=WindowState.Normal; if(!pinBack) Activate(); }
         if(op=="editor") {
             if(!todoPanel.OpenOriginal(S(request,"task"))) throw new InvalidOperationException("기본 브라우저를 열지 못했습니다. Windows 기본 브라우저 설정을 확인해 주세요.");
             return new D { {"opened","browser"},{"url","https://www.todomate.net/"} };

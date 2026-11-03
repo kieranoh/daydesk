@@ -39,7 +39,7 @@ TimeTree는 기본으로 기준 월의 앞뒤 6개월을 포함한 13개월을 �
 
 **Windows 10 1809 이상 또는 Windows 11의 x64 환경**을 대상으로 합니다. .NET Framework 4.6.2 이상이 필요합니다.
 
-1. [Releases](https://github.com/kieranoh/daydesk/releases/latest)에서 `Daydesk-Setup-1.2.1-x64.exe`를 받습니다.
+1. [Releases](https://github.com/kieranoh/daydesk/releases/latest)에서 `Daydesk-Setup-1.2.2-x64.exe`를 받습니다.
 2. 설치 경로를 선택합니다.
 3. 바탕화면 바로가기, Windows 로그인 시 자동 실행, CLI를 PATH에 추가할지 선택합니다.
 4. 설치를 마치고 Daydesk를 실행합니다.
@@ -47,7 +47,7 @@ TimeTree는 기본으로 기준 월의 앞뒤 6개월을 포함한 13개월을 �
 설치파일은 전자서명되어 있지 않습니다. 같은 릴리스의 `.sha256` 파일로 다운로드한 파일을 확인할 수 있습니다.
 
 ```powershell
-Get-FileHash .\Daydesk-Setup-1.2.1-x64.exe -Algorithm SHA256
+Get-FileHash .\Daydesk-Setup-1.2.2-x64.exe -Algorithm SHA256
 ```
 
 ### 업데이트
@@ -206,7 +206,7 @@ TimeTree 계정 연결도 앱의 설정에서 진행합니다. 개인 Codex 설�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\packaging\build_release.ps1
 ```
 
-빌드 도구는 공식 배포처에서 Python·Node 런타임과 Inno Setup을 받아 `build/`에 준비합니다. 생성되는 파일은 `dist/Daydesk-Setup-1.2.1-x64.exe`입니다. 빌드 전에 커밋된 기본 설정을 사용하며 빌드한 사람의 로그인 정보나 일정 캐시는 복사하지 않습니다.
+빌드 도구는 공식 배포처에서 Python·Node 런타임과 Inno Setup을 받아 `build/`에 준비합니다. 생성되는 파일은 `dist/Daydesk-Setup-1.2.2-x64.exe`입니다. 빌드 전에 커밋된 기본 설정을 사용하며 빌드한 사람의 로그인 정보나 일정 캐시는 복사하지 않습니다.
 
 <details>
 <summary>코드 구성과 테스트</summary>
