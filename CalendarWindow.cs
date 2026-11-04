@@ -43,7 +43,6 @@ public partial class CalendarWindow : Window {
     readonly ComboBox calendars = new ComboBox();
     readonly DispatcherTimer autosync = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
     readonly DispatcherTimer saveDelay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-    readonly DispatcherTimer frontCheck = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
     readonly TextBlock brand = Text("TimeTree", 20, true);
     readonly string python;
     readonly bool live;
@@ -60,6 +59,7 @@ public partial class CalendarWindow : Window {
     bool backendReady, selectingCalendar, pendingForce;
     string paintedModel="";
     double backgroundTransparency = 65;
+    double lastTransparency=65;
     double todoWidth=300;
     Process backend;
     WidgetCommands commands;
@@ -67,18 +67,16 @@ public partial class CalendarWindow : Window {
     Action<bool> changeSettingsTab;
     bool closing, loading, awaitingInitialConnections;
     bool pinBack;
-    bool temporaryFront;
-    ToggleButton backSwitch;
+    ToggleButton backSwitch,transparencySwitch;
     const uint KeepPositionNoActivate=0x0213; // Preserve position, size and owner order without taking focus.
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
     [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr window,int index);
     [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")] static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
     [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr window,uint flags);
     [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr window,uint command);
-    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [StructLayout(LayoutKind.Sequential)] struct WindowPosition { internal IntPtr Window,After; internal int X,Y,Width,Height; internal uint Flags; }
     void UpdateBackActivation() {
-        bool suppress=pinBack && !temporaryFront && (todoPanel==null || !todoPanel.HasInlineEditor);
+        bool suppress=pinBack && (todoPanel==null || !todoPanel.HasInlineEditor);
         ShowActivated=!suppress;
         var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
         if(handle==IntPtr.Zero) return;
@@ -92,25 +90,19 @@ public partial class CalendarWindow : Window {
         for(var current=GetAncestor(window,2);current!=IntPtr.Zero;current=GetWindow(current,4)) if(current==handle) return true;
         return false;
     }
-    void ShowTemporaryFront(bool activate=false) {
-        temporaryFront=true; UpdateBackActivation(); frontCheck.Start();
+    void ShowFromTaskbar(bool activate=false) {
+        SetWindowLayer(false,false);
         if(WindowState==WindowState.Minimized) WindowState=WindowState.Normal;
         SetWindowPos(new System.Windows.Interop.WindowInteropHelper(this).Handle,IntPtr.Zero,0,0,0,0,KeepPositionNoActivate);
         if(activate) Activate();
     }
-    void ReturnBehindIfInactive(IntPtr foreground) {
-        if(!temporaryFront || closing) return;
-        if(foreground==IntPtr.Zero || IsOwnWindow(foreground)) return;
-        temporaryFront=false; frontCheck.Stop(); UpdateBackActivation(); PlaceBehind();
-    }
     IntPtr BackWindowMessage(IntPtr window,int message,IntPtr wParam,IntPtr lParam,ref bool handled) {
         if(!pinBack || closing) return IntPtr.Zero;
         // Taskbar and Alt+Tab explicitly activate even a WS_EX_NOACTIVATE window.
-        if(!temporaryFront && message==0x0006 && (wParam.ToInt64()&0xffff)==1 && !todoPanel.HasInlineEditor && !IsOwnWindow(lParam) && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
-            ShowTemporaryFront();
+        if(message==0x0006 && (wParam.ToInt64()&0xffff)==1 && !todoPanel.HasInlineEditor && !IsOwnWindow(lParam) && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
+            ShowFromTaskbar(); return IntPtr.Zero;
         }
-        if(!temporaryFront && message==0x0112 && ((wParam.ToInt64()&0xfff0)==0xf020 || (wParam.ToInt64()&0xfff0)==0xf120) && !todoPanel.HasInlineEditor && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) { ShowTemporaryFront(true); handled=true; return IntPtr.Zero; }
-        if(temporaryFront) return IntPtr.Zero;
+        if(message==0x0112 && ((wParam.ToInt64()&0xfff0)==0xf020 || (wParam.ToInt64()&0xfff0)==0xf120) && !todoPanel.HasInlineEditor && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) { ShowFromTaskbar(true); handled=true; return IntPtr.Zero; }
         if(message==0x0021 && (todoPanel==null || !todoPanel.HasInlineEditor)) { handled=true; return new IntPtr(3); } // MA_NOACTIVATE keeps the click usable.
         if(message==0x0046 && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
             var position=(WindowPosition)Marshal.PtrToStructure(lParam,typeof(WindowPosition));
@@ -121,13 +113,13 @@ public partial class CalendarWindow : Window {
         return IntPtr.Zero;
     }
     void PlaceBehind() {
-        if(!pinBack || temporaryFront || closing || !IsLoaded || OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) return;
+        if(!pinBack || closing || !IsLoaded || OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) return;
         var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
         if(handle!=IntPtr.Zero) SetWindowPos(handle,new IntPtr(1),0,0,0,0,KeepPositionNoActivate);
     }
     void SetWindowLayer(bool above,bool below) {
         if(above && below) throw new ArgumentException("항상 위와 가장 뒤 고정은 동시에 켤 수 없습니다.");
-        bool wasBack=pinBack; pinBack=below; temporaryFront=false; frontCheck.Stop(); UpdateBackActivation(); Topmost=above;
+        bool wasBack=pinBack; pinBack=below; UpdateBackActivation(); Topmost=above;
         if(backSwitch!=null) backSwitch.IsChecked=below;
         if(wasBack && !below && IsLoaded) {
             var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
@@ -220,6 +212,7 @@ public partial class CalendarWindow : Window {
         int savedSync=(int)N(prefs,"sync_minutes",30); syncMinutes=new[]{0,15,30,60}.Contains(savedSync) ? savedSync : 30;
         nextSync=DateTime.UtcNow.AddMinutes(Math.Max(1,syncMinutes));
         backgroundTransparency=Math.Max(0,Math.Min(95,N(prefs,"background_transparency",65)));
+        lastTransparency=N(prefs,"last_background_transparency",backgroundTransparency>0 ? backgroundTransparency : 65); if(lastTransparency<=0 || lastTransparency>95) lastTransparency=65;
         todoWidth=Math.Max(260,Math.Min(600,N(prefs,"todo_width",300))); todoColumn.Width=new GridLength(todoWidth);
         todoVisible=!prefs.ContainsKey("todo_visible") || B(prefs,"todo_visible");
         Width=Math.Max(MinWidth,Math.Min(SystemParameters.VirtualScreenWidth,N(prefs,"width",960)));
@@ -243,6 +236,8 @@ public partial class CalendarWindow : Window {
         Grid.SetRow(header,0); layout.Children.Add(header);
         var controls=new StackPanel { Orientation=Orientation.Horizontal };
         DockPanel.SetDock(controls,Dock.Right); header.Children.Add(controls);
+        transparencySwitch=TodoPanel.CategorySwitch("투명",backgroundTransparency>0,on=> { SetTransparency(on ? lastTransparency : 0); ScheduleSave(); },Theme.Green);
+        transparencySwitch.ToolTip="배경 투명화 켜기·끄기 · 다시 켜면 이전 투명도로 복원"; AutomationProperties.SetName(transparencySwitch,"배경 투명화"); transparencySwitch.Margin=new Thickness(0,0,8,0); controls.Children.Add(transparencySwitch);
         todoSwitch=TodoPanel.CategorySwitch("투두",todoVisible,on=> { if(!SetTodoVisible(on)) { todoSwitch.IsChecked=todoVisible; status.Text="작성 중인 할 일을 저장하거나 취소한 뒤 숨겨 주세요."; } },Theme.Green);
         todoSwitch.ToolTip="Todo Mate 사이드 패널 표시·숨기기"; AutomationProperties.SetName(todoSwitch,"Todo Mate 사이드 패널 표시"); todoSwitch.Margin=new Thickness(0);
         backSwitch=TodoPanel.CategorySwitch("뒤로 고정",pinBack,on=>SetWindowLayer(on ? false : Topmost,on),Theme.Green); backSwitch.ToolTip="다른 프로그램 뒤로 고정"; backSwitch.Margin=new Thickness(0,0,8,0); controls.Children.Add(backSwitch);
@@ -306,10 +301,8 @@ public partial class CalendarWindow : Window {
             if(!CanClose()) { e.Cancel=true; status.Text="할 일 저장을 마친 뒤 종료해 주세요."; }
         };
         Activated += delegate { todoPanel.RefreshAfterBrowser(); };
-        Deactivated+=delegate { Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(delegate { ReturnBehindIfInactive(GetForegroundWindow()); })); };
-        frontCheck.Tick+=delegate { ReturnBehindIfInactive(GetForegroundWindow()); };
         Loaded+=delegate { PlaceBehind(); };
-        Closed += delegate { closing=true; if(commands!=null) commands.Dispose(); autosync.Stop(); frontCheck.Stop(); saveDelay.Stop(); Save(); todoPanel.Dispose(); StopBackend(); };
+        Closed += delegate { closing=true; if(commands!=null) commands.Dispose(); autosync.Stop(); saveDelay.Stop(); Save(); todoPanel.Dispose(); StopBackend(); };
         SetTransparency(backgroundTransparency); UpdatePeriod(); ShowSelectedTodos();
         EnsureRecommended();
         if(connect) { Loaded += delegate { RestoreCalendarList(); Refresh(); autosync.Start(); commands=new WidgetCommands(Dispatcher,HandleCommand,Close); if(ShouldPromptForAccounts) Dispatcher.BeginInvoke(new Action(()=>ShowSettings(true))); }; }
@@ -374,6 +367,8 @@ public partial class CalendarWindow : Window {
 
     void SetTransparency(double value) {
         backgroundTransparency=Math.Max(0,Math.Min(95,value));
+        if(backgroundTransparency>0) lastTransparency=backgroundTransparency;
+        if(transparencySwitch!=null) transparencySwitch.IsChecked=backgroundTransparency>0;
         // Only this brush changes alpha; the window and every foreground element stay opaque.
         plate.Background=new SolidColorBrush(Color.FromArgb(awaitingInitialConnections ? (byte)255 : (byte)Math.Round(255*(1-backgroundTransparency/100)),16,42,62));
     }
@@ -442,7 +437,7 @@ public partial class CalendarWindow : Window {
             prefs["view"]=view; prefs["calendar_id"]=calendarId; prefs["pin"]=Topmost; prefs["pin_back"]=pinBack;
             prefs["sync_minutes"]=syncMinutes;
             prefs["todo_width"]=todoWidth; prefs["todo_visible"]=todoVisible;
-            prefs["background_transparency"]=backgroundTransparency; prefs.Remove("transparency");
+            prefs["background_transparency"]=backgroundTransparency; prefs["last_background_transparency"]=lastTransparency; prefs.Remove("transparency");
             prefs["width"]=Width; prefs["height"]=Height; prefs["left"]=Left; prefs["top"]=Top;
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SettingsFile));
             var temp=SettingsFile+".tmp"; File.WriteAllText(temp,Json.Serialize(prefs),new UTF8Encoding(false));
@@ -810,7 +805,16 @@ public partial class CalendarWindow : Window {
         var pixels=new byte[4]; image.CopyPixels(new Int32Rect((int)point.X,(int)point.Y,1,1),pixels,4,0);
         WritePng(image,System.IO.Path.ChangeExtension(report,"png"));
         Check(pixels[3]==255,"Rendered event pixels must stay opaque: "+String.Join(",",pixels)+" at "+point+" size "+button.ActualWidth+"x"+button.ActualHeight);
-        window.SetTransparency(65); image=Render(content); WritePng(image,System.IO.Path.ChangeExtension(report,"png"));
+        window.SetTransparency(65);
+        window.transparencySwitch.IsChecked=false; window.transparencySwitch.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Check(window.backgroundTransparency==0 && window.lastTransparency==65 && ((SolidColorBrush)window.plate.Background).Color.A==255,"Transparency toggle did not make the background opaque or lost its previous value");
+        window.Save(); var opaqueWindow=new CalendarWindow("",false);
+        Check(opaqueWindow.transparencySwitch.IsChecked==false && opaqueWindow.lastTransparency==65,"Opaque mode or remembered transparency was not restored");
+        opaqueWindow.transparencySwitch.IsChecked=true; opaqueWindow.transparencySwitch.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Check(opaqueWindow.backgroundTransparency==65,"Enabling transparency after restart did not restore the old value"); opaqueWindow.todoPanel.Dispose();
+        window.transparencySwitch.IsChecked=true; window.transparencySwitch.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Check(window.backgroundTransparency==65 && window.Opacity==1,"Transparency toggle changed text opacity or failed to restore the value");
+        image=Render(content); WritePng(image,System.IO.Path.ChangeExtension(report,"png"));
         window.Save(); var restored=new CalendarWindow("",false);
         Check(restored.backgroundTransparency==65 && restored.Opacity==1,"Background setting did not restore independently");
         var allWeeks=A(data,"weeks"); var firstWeek=((IEnumerable)allWeeks[0]).Cast<object>().ToList();
