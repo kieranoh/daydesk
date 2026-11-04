@@ -62,7 +62,6 @@ sealed class TodoPanel : UserControl, IDisposable {
         var header=new DockPanel { Margin=new Thickness(12,0,12,10) }; HeaderControls=header;
         var refresh=Theme.Button("↻",Refresh,"Todo Mate 새로고침"); DockPanel.SetDock(refresh,Dock.Right); header.Children.Add(refresh);
         addButton=Theme.Button("+",ChooseCategory,"할 일 추가"); DockPanel.SetDock(addButton,Dock.Right); header.Children.Add(addButton);
-        var original=Theme.Button("원본 편집 ↗",delegate { OpenOriginal(""); },"기본 브라우저의 Todo Mate에서 추가·내용 수정·삭제"); original.ToolTip="기존 브라우저에서 Todo Mate 열기"; original.FontSize=11; original.Padding=new Thickness(6,5,6,5); DockPanel.SetDock(original,Dock.Right); header.Children.Add(original);
         loginButton=Theme.Button("계정 연결",OpenLogin,"Firebase 계정 연결"); DockPanel.SetDock(loginButton,Dock.Right); header.Children.Add(loginButton);
         var brand=new DockPanel { VerticalAlignment=VerticalAlignment.Center };
         var logo=CreateLogo();
@@ -308,8 +307,7 @@ sealed class TodoPanel : UserControl, IDisposable {
         var details=ActionItem("날짜·카테고리·알림"); details.IsEnabled=client!=null && client.Connected;
         details.Click+=async delegate { await Edit(todo,goal); }; menu.Items.Add(details);
         var remove=ActionItem("삭제",true); remove.IsEnabled=client!=null && client.Connected; remove.Click+=async delegate { await Delete(todo); }; menu.Items.Add(remove);
-        var original=ActionItem("Todo Mate에서 열기 ↗");
-        original.Click+=delegate { OpenOriginal(todo.Content); }; menu.Items.Add(original); menu.IsOpen=true;
+        menu.IsOpen=true;
     }
     void OpenLogin() {
         if(ConnectRequested!=null) { ConnectRequested(); return; }
@@ -418,15 +416,6 @@ sealed class TodoPanel : UserControl, IDisposable {
         } catch(Exception error) { status.Text=error.Message; }
         finally { busy=mutating=false; if(!disposed) list.IsEnabled=true; }
         if(pending && !disposed) { bool force=pendingForce; pending=pendingForce=false; await Reload(force); }
-    }
-    internal bool OpenOriginal(string task) {
-        if(disposed) return false;
-        try {
-            Process.Start(new ProcessStartInfo("https://www.todomate.net/") { UseShellExecute=true });
-            refreshAfterBrowser=true;
-            status.Text=string.IsNullOrWhiteSpace(task) ? "브라우저에서 편집 후 위젯으로 돌아오시면 갱신됩니다." : "브라우저에서 ‘"+task+"’ 항목을 찾아 수정·삭제해 주세요.";
-            return true;
-        } catch { status.Text="기본 브라우저를 열지 못했습니다. Windows 기본 브라우저 설정을 확인해 주세요."; return false; }
     }
     internal void RefreshAfterBrowser() {
         if(!refreshAfterBrowser || disposed) return;

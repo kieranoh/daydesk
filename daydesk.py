@@ -137,8 +137,6 @@ def parser():
     edit.add_argument("--clear-reminder", action="store_true")
     delete = todo_sub.add_parser("delete", help="본인 할 일 삭제")
     delete.add_argument("--id", required=True)
-    editor = todo_sub.add_parser("editor", help="기존 기본 브라우저에서 Todo Mate 열기")
-    editor.add_argument("--task", default="", help="위젯에 표시할 할 일 찾기 안내 (사이트 자동 검색은 지원하지 않음)")
     return p
 
 
@@ -354,8 +352,6 @@ def run(args):
     if args.command == "timetree":
         return timetree_command(args)
     if args.command == "todo":
-        if args.action == "editor":
-            return control({"op": "editor", "task": args.task}, launch=True)
         return todo_command(args)
     if args.command == "settings" and args.pin=='on' and args.pin_back=='on':
         raise ValueError("항상 위와 가장 뒤 고정은 동시에 켤 수 없습니다.")
@@ -385,8 +381,6 @@ def clean(value):
 
 
 def display(value):
-    if isinstance(value, dict) and value.get("opened") == "browser":
-        return "기본 브라우저에서 Todo Mate를 열었습니다. 편집 후 위젯으로 돌아오시면 갱신됩니다."
     if isinstance(value, dict) and "running" in value:
         rows = ["위젯: " + ("실행 중" if value["running"] else "종료됨"),
                 "보기: " + {"month": "월간", "week": "주간"}.get(value["view"], value["view"]),

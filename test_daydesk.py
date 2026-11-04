@@ -18,14 +18,6 @@ class DaydeskTests(unittest.TestCase):
         settings=patch.object(daydesk,"SETTINGS",Path(folder.name)/"settings.json"); settings.start(); self.addCleanup(settings.stop)
         executable=Path(folder.name)/'FirebaseTodo.exe'; executable.touch()
         native=patch.object(daydesk,'TODO',executable); native.start(); self.addCleanup(native.stop)
-    def test_editor_opens_browser_and_reports_destination(self):
-        args = daydesk.parser().parse_args(["todo", "editor", "--task", "찾을 할 일"])
-        result = {"opened":"browser", "url":"https://www.todomate.net/"}
-        with patch.object(daydesk, "control", return_value=result) as control:
-            self.assertEqual(daydesk.run(args), result)
-            control.assert_called_once_with({"op":"editor", "task":"찾을 할 일"}, launch=True)
-            self.assertIn("기본 브라우저", daydesk.display(result))
-
     def test_invalid_settings_never_reach_widget(self):
         for args in (("settings", "--transparency", "nan"), ("settings", "--transparency", "96"),
                      ("open", "--date", "2026-02-30"), ("open", "--date", "20261103"),

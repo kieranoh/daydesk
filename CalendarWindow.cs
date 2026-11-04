@@ -318,7 +318,7 @@ public partial class CalendarWindow : Window {
     D HandleCommand(D request) {
         if(request==null) throw new ArgumentException("명령이 비어 있습니다.");
         string op=S(request,"op");
-        if(!new[]{"status","open","settings","refresh","todo-cache","timetree-cache","editor","close"}.Contains(op)) throw new ArgumentException("지원하지 않는 위젯 명령입니다.");
+        if(!new[]{"status","open","settings","refresh","todo-cache","timetree-cache","close"}.Contains(op)) throw new ArgumentException("지원하지 않는 위젯 명령입니다.");
         string nextView=S(request,"view",view); DateTime day=selected;
         if(nextView!="month") throw new ArgumentException("위젯은 월간 달력으로 표시됩니다. 주간 전환 기능은 제거되었습니다.");
         if(request.ContainsKey("date") && !DateTime.TryParseExact(S(request,"date"),"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out day)) throw new ArgumentException("날짜는 YYYY-MM-DD 형식입니다.");
@@ -354,10 +354,6 @@ public partial class CalendarWindow : Window {
             if(!Save()) throw new IOException("설정은 적용되었지만 저장하지 못했습니다.");
         }
         if(op=="open") { Show(); WindowState=WindowState.Normal; if(!pinBack) Activate(); }
-        if(op=="editor") {
-            if(!todoPanel.OpenOriginal(S(request,"task"))) throw new InvalidOperationException("기본 브라우저를 열지 못했습니다. Windows 기본 브라우저 설정을 확인해 주세요.");
-            return new D { {"opened","browser"},{"url","https://www.todomate.net/"} };
-        }
         if(op=="refresh") { Refresh(true); todoPanel.Refresh(); }
         if(op=="todo-cache") todoPanel.ReloadCached();
         if(op=="timetree-cache") Refresh();
