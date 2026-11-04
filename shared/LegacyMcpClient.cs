@@ -70,8 +70,11 @@ sealed class MateClient : IDisposable
 
     public static string ExtractOneTimeToken(string input)
     {
-        var match = Regex.Match(input, "[\"']?oneTimeToken[\"']?\\s*[:=]\\s*[\"']?([A-Za-z0-9._~+/=-]+)", RegexOptions.IgnoreCase);
-        string value = match.Success ? match.Groups[1].Value : input.Trim();
+        if (input == null || input.Length > 65536) throw new InvalidOperationException("PlayMCP 일회용 키 또는 연결 프롬프트를 붙여 넣어 주세요.");
+        var matches = Regex.Matches(input, "(?<![A-Za-z0-9_])[\"'`*]*(?:oneTimeToken|one[_-]time[_-]token|OTT)[\"'`*]*\\s*[:=：]\\s*[\"'`*]*([A-Za-z0-9._~+/=-]+)", RegexOptions.IgnoreCase);
+        var candidates = matches.Cast<Match>().Select(m=>m.Groups[1].Value).Distinct(StringComparer.Ordinal).ToArray();
+        if (candidates.Length > 1) throw new InvalidOperationException("서로 다른 일회용 키가 여러 개 있습니다. 새 연결 프롬프트 하나만 붙여 넣어 주세요.");
+        string value = candidates.Length == 1 ? candidates[0] : input.Trim().Trim('"','\'','`','*');
         if (value.Length < 16 || value.Length > 4096 || !Regex.IsMatch(value, "^[A-Za-z0-9._~+/=-]+$"))
             throw new InvalidOperationException("PlayMCP의 ‘OpenClaw와 연결’에서 생성한 연결 프롬프트 또는 일회용 토큰을 붙여 넣어 주세요.");
         return value;

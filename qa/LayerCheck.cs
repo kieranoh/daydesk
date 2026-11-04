@@ -68,8 +68,26 @@ static class LayerCheck {
             }
             watching=false;
             if(transientRaises!=0) throw new Exception("Widget briefly appeared above external windows");
-            widget.Activate(); Pump();
-            if(!Below(widget,other)) throw new Exception("Activating widget broke its back pin");
+            other.Activate(); Pump();
+            for(int attempt=0;attempt<5;attempt++) {
+                bool activated=SetForegroundWindow(Handle(widget)); Pump();
+                if(!(bool)type.GetField("temporaryFront",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(widget) || Below(widget,other) || widget.Topmost) throw new Exception("Explicit taskbar-style activation did not bring the back-pinned widget forward: native="+activated+", peek="+type.GetField("temporaryFront",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(widget)+", foreground="+GetForegroundWindow()+", widget="+Handle(widget)+", active="+widget.IsActive+", below="+Below(widget,other));
+                other.Activate(); Pump();
+                if((bool)type.GetField("temporaryFront",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(widget) || !Below(widget,other)) throw new Exception("Widget did not return behind after switching to another window");
+            }
+            SetForegroundWindow(Handle(widget)); Pump(); layer(false,true);
+            SendMessage(Handle(widget),0x0112,new IntPtr(0xf020),IntPtr.Zero); Pump();
+            if(widget.WindowState==WindowState.Minimized || Below(widget,other)) throw new Exception("Taskbar click on an active back-pinned window minimized it instead of revealing it");
+            other.Activate(); Pump();
+            widget.WindowState=WindowState.Minimized; Pump();
+            SendMessage(Handle(widget),0x0112,new IntPtr(0xf120),IntPtr.Zero); Pump();
+            if(widget.WindowState!=WindowState.Normal || Below(widget,other) || !widget.IsActive) throw new Exception("Taskbar restore did not reveal and activate the widget");
+            other.Activate(); Pump();
+            if((bool)type.GetField("temporaryFront",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(widget) || !Below(widget,other)) throw new Exception("Restored widget did not resume its back pin");
+            SetForegroundWindow(Handle(widget)); Pump();
+            child=new Window { Owner=widget,Left=-30000,Top=-30000,Width=200,Height=100 }; child.Show(); Pump();
+            if(!(bool)type.GetField("temporaryFront",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(widget) || !child.IsActive) throw new Exception("Opening an owned dialog ended temporary front mode");
+            child.Close(); child=null; Pump(); other.Activate(); Pump();
             layer(true,false); if(!widget.Topmost) throw new Exception("Top pin failed to replace back pin");
             layer(false,false); if(widget.Topmost) throw new Exception("Normal layer was not restored");
             var input=new System.Windows.Controls.TextBox { Text="sample" };
@@ -77,9 +95,11 @@ static class LayerCheck {
             input.Focus(); Pump();
             if(!input.IsKeyboardFocused) throw new Exception("Owned editor could not accept keyboard input");
             layer(false,true); if(!child.IsVisible || !Below(widget,child)) throw new Exception("Owned editor became unusable");
-            child.Close(); child=null; widget.Activate(); Pump();
+            child.Close(); child=null; Pump();
+            if((bool)type.GetField("temporaryFront",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(widget)) throw new Exception("Closing a background-owned editor accidentally enabled temporary front mode");
+            other.Activate(); Pump();
             if(!Below(widget,other)) throw new Exception("Back pin did not resume after editor closed");
-            File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layer-check-result.json"),"{\"passed\":true,\"backPin\":true,\"activationKeepsBack\":true,\"topPinExclusive\":true,\"ownedEditorUsable\":true,\"externalProcesses\":2,\"switchCycles\":20,\"externalOrderAndFocusPreserved\":true,\"transientRaises\":0,\"editorKeyboardFocus\":true}");
+            File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layer-check-result.json"),"{\"passed\":true,\"backPin\":true,\"taskbarActivationAndReturnCycles\":5,\"topPinExclusive\":true,\"ownedEditorUsable\":true,\"externalProcesses\":2,\"switchCycles\":20,\"externalOrderAndFocusPreserved\":true,\"transientRaises\":0,\"editorKeyboardFocus\":true}");
             string errorPath=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layer-check-error.txt"); if(File.Exists(errorPath)) File.Delete(errorPath);
             return 0;
         } catch(Exception error) { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layer-check-error.txt"),error.ToString()); return 1; }

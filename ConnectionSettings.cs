@@ -138,7 +138,8 @@ public partial class CalendarWindow {
         title("PlayMCP 보조 연결 · 선택");
         label("Firebase 조회 한도에 걸렸을 때만 사용하는 보조 조회입니다. 지금 연결하지 않으셔도 됩니다.");
         guide("PlayMCP","1. ‘PlayMCP 열기’를 누르고 카카오 계정으로 로그인합니다.\n2. ‘투두메이트’를 찾아 도구함에 추가하고, 위에서 연결한 것과 같은 Todo Mate 계정으로 인증합니다.\n3. 도구함에서 ‘OpenClaw와 연결’ → 데이터 제공 동의 → ‘연결 프롬프트 생성’을 선택합니다.\n4. 만들어진 연결 프롬프트 전체를 복사해 아래 칸에 붙여 넣고 ‘연결’을 누릅니다.\n\n발급 후 10분 안에 붙여 넣어 주세요. 만료되면 새로 생성하시면 됩니다. ‘OpenClaw와 연결’에서 만든 텍스트를 이 위젯이 처리하므로 OpenClaw를 따로 설치할 필요는 없습니다.\n\nPlayMCP에도 자체 조회 한도가 있습니다. 이 연결은 조회만 보조하며, 추가·수정·삭제·완료는 Firebase로 처리합니다. 나중에도 설정 → 계정 연결에서 연결할 수 있습니다.");
-        var mcpPrompt=secretField("PlayMCP 일회용 연결 프롬프트");
+        label("일회용 키(OTT)만 또는 연결 프롬프트 전체를 붙여 넣으세요. 키만 자동 추출합니다.");
+        var mcpPrompt=secretField("PlayMCP 일회용 키 또는 연결 프롬프트 전체");
         var mcpActions=new WrapPanel(); page.Children.Add(mcpActions);
         var mcpConnect=Btn("연결",delegate {}); mcpActions.Children.Add(mcpConnect);
         mcpActions.Children.Add(Btn("PlayMCP 열기 ↗",delegate { Process.Start(new ProcessStartInfo("https://playmcp.kakao.com/") { UseShellExecute=true }); }));

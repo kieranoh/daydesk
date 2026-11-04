@@ -66,14 +66,16 @@ public partial class CalendarWindow : Window {
     Action<bool> changeSettingsTab;
     bool closing, loading, awaitingInitialConnections;
     bool pinBack;
+    bool temporaryFront;
     ToggleButton backSwitch;
     const uint KeepPositionNoActivate=0x0213; // Preserve position, size and owner order without taking focus.
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
     [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr window,int index);
     [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")] static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr window,uint flags);
     [StructLayout(LayoutKind.Sequential)] struct WindowPosition { internal IntPtr Window,After; internal int X,Y,Width,Height; internal uint Flags; }
     void UpdateBackActivation() {
-        bool suppress=pinBack && (todoPanel==null || !todoPanel.HasInlineEditor);
+        bool suppress=pinBack && !temporaryFront && (todoPanel==null || !todoPanel.HasInlineEditor);
         ShowActivated=!suppress;
         var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
         if(handle==IntPtr.Zero) return;
@@ -81,8 +83,20 @@ public partial class CalendarWindow : Window {
         SetWindowLongPtr(handle,-20,new IntPtr(suppress ? style|0x08000000L : style&~0x08000000L));
     }
     internal void InlineInputChanged(bool focus) { UpdateBackActivation(); if(focus) Activate(); else PlaceBehind(); }
+    void ShowTemporaryFront() {
+        temporaryFront=true; UpdateBackActivation();
+        if(WindowState==WindowState.Minimized) WindowState=WindowState.Normal;
+        SetWindowPos(new System.Windows.Interop.WindowInteropHelper(this).Handle,IntPtr.Zero,0,0,0,0,KeepPositionNoActivate);
+        Activate();
+    }
     IntPtr BackWindowMessage(IntPtr window,int message,IntPtr wParam,IntPtr lParam,ref bool handled) {
         if(!pinBack || closing) return IntPtr.Zero;
+        // Taskbar and Alt+Tab explicitly activate even a WS_EX_NOACTIVATE window.
+        if(!temporaryFront && message==0x0006 && (wParam.ToInt64()&0xffff)==1 && !todoPanel.HasInlineEditor && GetAncestor(lParam,3)!=window && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
+            ShowTemporaryFront();
+        }
+        if(!temporaryFront && message==0x0112 && ((wParam.ToInt64()&0xfff0)==0xf020 || (wParam.ToInt64()&0xfff0)==0xf120) && !todoPanel.HasInlineEditor && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) { ShowTemporaryFront(); handled=true; return IntPtr.Zero; }
+        if(temporaryFront) return IntPtr.Zero;
         if(message==0x0021 && (todoPanel==null || !todoPanel.HasInlineEditor)) { handled=true; return new IntPtr(3); } // MA_NOACTIVATE keeps the click usable.
         if(message==0x0046 && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
             var position=(WindowPosition)Marshal.PtrToStructure(lParam,typeof(WindowPosition));
@@ -93,13 +107,13 @@ public partial class CalendarWindow : Window {
         return IntPtr.Zero;
     }
     void PlaceBehind() {
-        if(!pinBack || closing || !IsLoaded || OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) return;
+        if(!pinBack || temporaryFront || closing || !IsLoaded || OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) return;
         var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
         if(handle!=IntPtr.Zero) SetWindowPos(handle,new IntPtr(1),0,0,0,0,KeepPositionNoActivate);
     }
     void SetWindowLayer(bool above,bool below) {
         if(above && below) throw new ArgumentException("항상 위와 가장 뒤 고정은 동시에 켤 수 없습니다.");
-        bool wasBack=pinBack; pinBack=below; UpdateBackActivation(); Topmost=above;
+        bool wasBack=pinBack; pinBack=below; temporaryFront=false; UpdateBackActivation(); Topmost=above;
         if(backSwitch!=null) backSwitch.IsChecked=below;
         if(wasBack && !below && IsLoaded) {
             var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
@@ -278,6 +292,10 @@ public partial class CalendarWindow : Window {
             if(!CanClose()) { e.Cancel=true; status.Text="할 일 저장을 마친 뒤 종료해 주세요."; }
         };
         Activated += delegate { todoPanel.RefreshAfterBrowser(); };
+        Deactivated+=delegate { Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(delegate {
+            if(!temporaryFront || IsActive || OwnedWindows.Cast<Window>().Any(w=>w.IsActive)) return;
+            temporaryFront=false; UpdateBackActivation(); PlaceBehind();
+        })); };
         Loaded+=delegate { PlaceBehind(); };
         Closed += delegate { closing=true; if(commands!=null) commands.Dispose(); autosync.Stop(); saveDelay.Stop(); Save(); todoPanel.Dispose(); StopBackend(); };
         SetTransparency(backgroundTransparency); UpdatePeriod(); ShowSelectedTodos();
