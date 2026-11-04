@@ -245,13 +245,14 @@ sealed class TodoPanel : UserControl, IDisposable {
             var title=new TextBlock { Text=string.IsNullOrWhiteSpace(goal.Title) ? "기본" : goal.Title, Foreground=Theme.Brush("#13272C"), FontSize=12, FontWeight=FontWeights.SemiBold, TextTrimming=TextTrimming.CharacterEllipsis };
             heading.Children.Add(new Border { Child=title, Background=ColorFor(goal.Id), CornerRadius=new CornerRadius(12),Padding=new Thickness(10,5,10,5),VerticalAlignment=VerticalAlignment.Center }); list.Children.Add(heading);
             foreach(var todo in items.Where(t=>t.GoalId==goal.Id)) {
-                if(HasInlineEditor && inlineTodo!=null && inlineTodo.Id==todo.Id) { list.Children.Add(inlineEditor); continue; }
+                bool editing=HasInlineEditor && inlineTodo!=null && inlineTodo.Id==todo.Id;
                 var targetTodo=todo; var row=new DockPanel { Margin=new Thickness(0,0,0,4) };
                 Button edit=null; edit=Theme.Button("···",delegate { ShowActions(targetTodo,target,edit); },todo.Content+" 작업"); edit.Background=Brushes.Transparent; edit.Padding=new Thickness(4); DockPanel.SetDock(edit,Dock.Right); row.Children.Add(edit);
                 var done=new CheckBox { IsChecked=todo.Done, VerticalAlignment=VerticalAlignment.Top,Margin=new Thickness(0,2,6,0),IsEnabled=client!=null };
                 AutomationProperties.SetName(done,todo.Content+" 완료 상태");
                 done.Click+=async delegate { bool desired=done.IsChecked==true; done.IsChecked=targetTodo.Done; await SetDone(targetTodo,desired); };
                 DockPanel.SetDock(done,Dock.Left); row.Children.Add(done);
+                if(editing) { edit.IsHitTestVisible=done.IsHitTestVisible=false; edit.Focusable=done.Focusable=false; row.Children.Add(inlineEditor); list.Children.Add(row); continue; }
                 var content=Theme.Text(todo.Content,13); content.TextWrapping=TextWrapping.Wrap; content.Margin=new Thickness(0,4,0,4); if(todo.Done) content.TextDecorations=TextDecorations.Strikethrough;
                 content.Focusable=true; content.ToolTip="더블클릭 또는 F2로 내용 수정";
                 content.MouseLeftButtonDown+=delegate(object sender,MouseButtonEventArgs e) { if(e.ClickCount==2) { BeginInline(targetTodo,target); e.Handled=true; } };
@@ -336,6 +337,16 @@ sealed class TodoPanel : UserControl, IDisposable {
         inlineSave=Theme.Button(todo==null ? "추가" : "저장",async delegate { await SaveInline(todo==null); }); inlineSave.FontSize=11; inlineSave.Padding=new Thickness(7,3,7,3); actions.Children.Add(inlineSave);
         inlineCancel=Theme.Button("취소",CloseInline); inlineCancel.FontSize=11; inlineCancel.Padding=new Thickness(7,3,7,3); actions.Children.Add(inlineCancel); body.Children.Add(actions);
         inlineEditor=new Border { Child=body,Margin=new Thickness(25,2,0,8),Padding=new Thickness(0),CornerRadius=new CornerRadius(6) };
+        if(todo!=null) {
+            var text=Theme.Text(todo.Content,13);
+            inlineInput.Background=Brushes.Transparent; inlineInput.BorderThickness=new Thickness(0); inlineInput.Padding=new Thickness(0); inlineInput.MinHeight=0;
+            inlineInput.Foreground=text.Foreground; inlineInput.CaretBrush=text.Foreground; inlineInput.Effect=text.Effect;
+            if(todo.Done) inlineInput.TextDecorations=TextDecorations.Strikethrough;
+            inlineInput.VerticalAlignment=VerticalAlignment.Center;
+            var host=new FrameworkElementFactory(typeof(ScrollViewer),"PART_ContentHost");
+            inlineInput.Template=new ControlTemplate(typeof(TextBox)) { VisualTree=host };
+            body.Children.Remove(inlineInput); inlineEditor.Child=inlineInput; inlineEditor.Margin=new Thickness(0,4,0,4);
+        }
         var editor=inlineEditor;
         inlineInput.PreviewKeyDown+=async delegate(object sender,KeyEventArgs e) {
             if(e.Key==Key.Escape) { e.Handled=true; CloseInline(); }

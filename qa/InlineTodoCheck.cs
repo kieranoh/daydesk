@@ -32,6 +32,11 @@ static class InlineTodoCheck {
     static void Pump() { var frame=new DispatcherFrame(); Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>frame.Continue=false)); Dispatcher.PushFrame(frame); }
     static void Await(object value) { var task=(Task)value; var watch=Stopwatch.StartNew(); while(!task.IsCompleted && watch.ElapsedMilliseconds<10000) { Pump(); Thread.Sleep(1); } Check(task.IsCompleted,"Inline request did not finish"); task.GetAwaiter().GetResult(); Pump(); }
     static IEnumerable<T> Children<T>(DependencyObject item) where T:DependencyObject { for(int i=0;i<VisualTreeHelper.GetChildrenCount(item);i++) { var child=VisualTreeHelper.GetChild(item,i); if(child is T) yield return (T)child; foreach(var nested in Children<T>(child)) yield return nested; } }
+    static void Image(FrameworkElement element,string name) {
+        var visual=new DrawingVisual(); using(var drawing=visual.RenderOpen()) drawing.DrawRectangle(new VisualBrush(element),null,new Rect(0,0,element.ActualWidth,element.ActualHeight));
+        var bitmap=new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth),(int)Math.Ceiling(element.ActualHeight),96,96,PixelFormats.Pbgra32); bitmap.Render(visual);
+        var encoder=new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap)); using(var file=File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,name))) encoder.Save(file);
+    }
     sealed class Fake : HttpMessageHandler {
         internal Queue<Func<HttpRequestMessage,string,object>> Calls=new Queue<Func<HttpRequestMessage,string,object>>();
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token) {
@@ -48,7 +53,8 @@ static class InlineTodoCheck {
     static D Fields(string body) { return (D)((D)Json.DeserializeObject(body))["fields"]; }
     static void Goals(Fake fake) {
         var document=new D { {"name","projects/mate-914f3/databases/(default)/documents/Goal/empty-goal"},{"fields",new D { {"userID",V("synthetic-owner")},{"title",V("빈 카테고리")} }} };
-        fake.Calls.Enqueue((r,b)=>new[]{new D { {"document",document} }});
+        var existing=new D { {"name","projects/mate-914f3/databases/(default)/documents/Goal/sample-goal"},{"fields",new D { {"userID",V("synthetic-owner")},{"title",V("샘플")} }} };
+        fake.Calls.Enqueue((r,b)=>new[]{new D { {"document",existing} },new D { {"document",document} }});
     }
     [STAThread] static int Main(string[] args) {
         Environment.SetEnvironmentVariable("DAYDESK_DATA_DIR",Path.Combine(Path.GetTempPath(),"daydesk-inline-check-"+Guid.NewGuid().ToString("N")));
@@ -62,6 +68,7 @@ static class InlineTodoCheck {
             var panel=(FrameworkElement)Field(window,"todoPanel"); var fake=new Fake();
             var client=Activator.CreateInstance(assembly.GetType("MateClient"),new object[]{Path.Combine(profile,"firebase"),fake,"synthetic-key"}); panel.GetType().GetField("client",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(panel,client);
             var data=Json.Deserialize(Json.Serialize(new { Goals=new[]{new { Id="sample-goal",Title="샘플" },new { Id="empty-goal",Title="빈 카테고리" }},Todos=new[]{new { Id="sample-task",Content="기존 내용",GoalId="sample-goal",Category="샘플",Date=day,Done=false,Reminder="" }} }),assembly.GetType("WeekData"));
+            foreach(var todo in ((IEnumerable)Field(data,"Todos"))) todo.GetType().GetField("Date").SetValue(todo,day);
             assembly.GetType("TodoSnapshots").GetField("AccountKey",BindingFlags.Static|BindingFlags.NonPublic).SetValue(null,Static("MateClient","Hash","synthetic-owner"));
             Static("TodoSnapshots","SaveMonth",data,day,day.AddDays(-3),day.AddDays(3)); Call(panel,"ApplyData",data,day.AddDays(-3),(DateTime?)day.AddDays(3));
             window.Show(); Call(window,"SetWindowLayer",false,true); Pump();
@@ -76,7 +83,18 @@ static class InlineTodoCheck {
             input.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(window),0,Key.Escape) { RoutedEvent=UIElement.PreviewKeyDownEvent }); Pump();
             Check(Field(panel,"inlineInput")==null && fake.Calls.Count==0,"Escape saved or lost the cancelled draft state");
             Check((GetWindowLongPtr(new System.Windows.Interop.WindowInteropHelper(window).Handle,-20).ToInt64()&0x08000000L)!=0,"Closing inline input left the widget activatable");
-            Call(panel,"BeginInline",original,goals[0]); Pump(); input=(TextBox)Field(panel,"inlineInput"); input.Text="수정된 내용";
+            window.UpdateLayout();
+            var label=Children<TextBlock>(panel).Single(t=>t.Text==(string)Field(original,"Content"));
+            Point position=label.TranslatePoint(new Point(),panel); double height=label.ActualHeight;
+            Image(panel,"inline-edit-before.png");
+            Call(panel,"BeginInline",original,goals[0]); Pump(); window.UpdateLayout(); input=(TextBox)Field(panel,"inlineInput");
+            Check(((SolidColorBrush)input.Background).Color.A==0 && input.BorderThickness==new Thickness(0) && input.Padding==new Thickness(0),"Editing added an opaque field or frame");
+            Check(input.Foreground.ToString()==label.Foreground.ToString() && input.FontSize==label.FontSize,"Editing changed text appearance");
+            Check((input.TranslatePoint(new Point(),panel)-position).Length<2 && Math.Abs(input.ActualHeight-height)<2,"Editing moved or resized the original text row");
+            Check(Children<CheckBox>((DependencyObject)Field(panel,"list")).Count()==2,"Editing removed the original row checkbox");
+            Check(!Children<Button>((DependencyObject)Field(panel,"inlineEditor")).Any(),"Editing added a button panel");
+            Image(panel,"inline-edit-after.png");
+            input.Text="수정된 내용";
             fake.Calls.Enqueue((r,b)=>Document(day)); fake.Calls.Enqueue((r,b)=> { Check(r.Method.Method=="PATCH" && Fields(b).Count==1 && Fields(b).ContainsKey("content"),"Inline edit overwrote metadata"); return Document(day,"수정된 내용"); });
             Await(Call(panel,"SaveInline",false)); Check(Field(panel,"inlineInput")==null && fake.Calls.Count==0,"Inline edit did not finish");
             Check((string)Field(((IEnumerable)Field(data,"Todos")).Cast<object>().First(),"Id")=="sample-task","Editing moved a task out of its existing position");

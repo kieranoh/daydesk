@@ -402,7 +402,7 @@ public partial class CalendarWindow : Window {
     void UpdatePeriod() {
         period.Text=anchor.ToString("yyyy년 M월");
     }
-    void Navigate(int delta) { expandedWeekStart=null; anchor=new DateTime(anchor.Year,anchor.Month,1).AddMonths(delta); selected=anchor; ShowSelectedTodos(); UpdatePeriod(); Refresh(); }
+    void Navigate(int delta) { expandedWeekStart=null; anchor=new DateTime(anchor.Year,anchor.Month,1).AddMonths(delta); UpdatePeriod(); Refresh(); }
     void ExpandWeek(DateTime start) { expandedWeekStart=expandedWeekStart==start ? (DateTime?)null : start; SetModel(model); }
     void StartBackend() {
         if(backend!=null && !backend.HasExited) return;
@@ -684,6 +684,16 @@ public partial class CalendarWindow : Window {
         },new DateTime(2026,11,1));
         Check(window.todoPanel.VisibleTodos.Count==2,"Todo panel did not display selected-day tasks");
         Check(window.todoPanel.OccupiedCategories.Count()==2,"Empty categories appeared in Todo Mate");
+        SnapshotStore.Write("timetree",window.calendarId+"|2026-11",Json.Serialize(new { model=data,warning="" }));
+        var december=Json.Deserialize<D>(Json.Serialize(data)); december["period"]="2026년 12월";
+        december["days"]=Enumerable.Range(0,A(data,"days").Length).Select(i=>new DateTime(2026,11,29).AddDays(i).ToString("yyyy-MM-dd")).ToArray();
+        SnapshotStore.Write("timetree",window.calendarId+"|2026-12",Json.Serialize(new { model=december,warning="" }));
+        window.Navigate(1);
+        Check(window.anchor==new DateTime(2026,12,1) && window.selected==new DateTime(2026,11,3) && window.todoPanel.VisibleTodos.Count==2,"Browsing next month changed the Todo date or its tasks");
+        window.Select(new DateTime(2026,12,2));
+        Check(window.todoPanel.VisibleTodos.Count==0,"Explicit calendar date selection did not update Todo Mate");
+        window.Select(new DateTime(2026,11,3)); window.Navigate(-1);
+        Check(window.anchor==new DateTime(2026,11,1) && window.selected==new DateTime(2026,11,3) && window.todoPanel.VisibleTodos.Count==2,"Browsing previous month changed the Todo date or its tasks");
         window.Select(new DateTime(2026,11,4)); Check(window.todoPanel.VisibleTodos.Count==1 && window.todoPanel.VisibleTodos[0].Id=="sample-c","Calendar date did not update Todo Mate");
         Check(window.todoPanel.OccupiedCategories.Count()==1,"Categories from another date remained visible");
         window.Select(new DateTime(2026,11,5)); Check(window.todoPanel.VisibleTodos.Count==0 && window.todoPanel.OccupiedCategories.Count()==0 && window.todoPanel.CategoryControls.Visibility==Visibility.Visible,"An empty date hid the category switches or showed empty list categories");
