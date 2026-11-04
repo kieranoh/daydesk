@@ -19,13 +19,19 @@ def form_for(event):
         label_id=event.get('label_id') or 1,note=event.get('note') or '',location=event.get('location') or '',url=event.get('url') or '')
 
 
+def last_added_label(calendar_id,labels):
+    saved=cache_store.read('timetree',calendar_id+'|last-added-label')
+    label=saved[0].get('label_id') if saved else 1
+    return label if type(label) is int and 1<=label<=10 and (not labels or any(x.get('id')==label for x in labels)) else 1
+
+
 def cached_event_form(request):
     calendar_id=request['calendar_id']
     anchor=date.fromisoformat(request.get('anchor') or request['date'])
     saved=cache_store.read('timetree',f'{calendar_id}|{anchor:%Y-%m}')
-    if not saved: return None
-    model=saved[0].get('model',{})
     key=request.get('event')
+    if not saved and key: return None
+    model=saved[0].get('model',{}) if saved else {}
     if key:
         matches=[e for e in model.get('events',[]) if (e.get('uuid') or e.get('id'))==(key.get('uuid') or key.get('id')) and e.get('source_start')==key.get('source_start')]
         if len(matches)!=1: return None
@@ -38,6 +44,7 @@ def cached_event_form(request):
         result=dict(form=dict(title='',all_day=True,start_date=day,end_date=day,start_time='09:00',end_time='10:00',label_id=1,note='',location='',url=''),event=None,version='',recurring=False)
     labels=cache_store.read('timetree',calendar_id+'|labels')
     labels=labels[0]['labels'] if labels else model.get('labels')
+    if not key: result['form']['label_id']=last_added_label(calendar_id,labels)
     result.update(labels=labels or [],labels_cached=labels is not None,cached=True)
     return result
 
@@ -73,7 +80,7 @@ def event_form(client,calendar_id,key,selected):
         return dict(labels=labels,form=form_for(event),event=dict(uuid=event['uuid'],source_start=event['start_at']),
             version=version(event),recurring=bool(event.get('has_recurrence')))
     day=date.fromisoformat(selected)
-    form=dict(title='',all_day=True,start_date=day.isoformat(),end_date=day.isoformat(),start_time='09:00',end_time='10:00',label_id=1,note='',location='',url='')
+    form=dict(title='',all_day=True,start_date=day.isoformat(),end_date=day.isoformat(),start_time='09:00',end_time='10:00',label_id=last_added_label(calendar_id,labels),note='',location='',url='')
     return dict(labels=labels,form=form,event=None,version='',recurring=False)
 
 
@@ -164,7 +171,11 @@ def perform(client,request):
         except Exception:
             # Never retry an ambiguous write; the server may already have accepted it.
             raise InputError('저장 응답을 확인하지 못했습니다. 중복 실행하지 마시고 창을 닫은 뒤 새로고침으로 반영 여부를 확인해 주세요.') from None
-        try: warning=refresh_cached(client,calendar_id,anchor)
+        warning=''
+        if action=='event-add':
+            try: cache_store.write('timetree',calendar_id+'|last-added-label',dict(label_id=fields['label_id']))
+            except Exception: warning='일정은 저장되었습니다. 마지막 라벨을 기억하지 못했습니다.'
+        try: warning=refresh_cached(client,calendar_id,anchor) or warning
         except Exception: warning='서버 저장은 완료되었습니다. 캐시 갱신을 위해 새로고침해 주세요.'
         return dict(saved=True,changed=True,deleted=action=='event-delete',date=anchor.isoformat(),event=result.get('event'),cache_warning=warning)
 

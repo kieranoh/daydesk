@@ -72,7 +72,7 @@ def stage():
     recommendation=json.loads((ROOT/'defaults.json').read_text(encoding='utf-8'))
     defaults={'view':'month','width':960,'height':700,'autostart':True,'background_transparency':recommendation.get('background_transparency',65),'pin':recommendation.get('pin',False),'pin_back':recommendation.get('pin_back',False),'sync_minutes':recommendation.get('sync_minutes',30),'todo_width':recommendation.get('todo_width',300),'todo':{'ShowAllCategories':recommendation.get('todo',{}).get('ShowAllCategories',False),'HiddenGoals':[]}}
     (STAGE/'defaults.json').write_text(json.dumps(defaults,ensure_ascii=False,indent=2),encoding='utf-8')
-    (STAGE/'standalone.json').write_text(json.dumps({'name':'Daydesk','version':'1.3.2','platform':'windows-x64'}),encoding='utf-8')
+    (STAGE/'standalone.json').write_text(json.dumps({'name':'Daydesk','version':'1.3.3','platform':'windows-x64'}),encoding='utf-8')
     records={str(file.relative_to(STAGE)).replace('\\','/'):{'sha256':hashlib.sha256(file.read_bytes()).hexdigest(),'bytes':file.stat().st_size} for file in STAGE.rglob('*') if file.is_file()}
     (BUILD/'payload-manifest.json').write_text(json.dumps(records,indent=2),encoding='utf-8')
     print(json.dumps({'payload_files':len(records),'payload_bytes':sum(r['bytes'] for r in records.values()),'bundled_tzdata':metadata['info']['version']}))

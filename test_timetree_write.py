@@ -93,6 +93,35 @@ class TreeWriteTests(unittest.TestCase):
         with patch.object(tree,'refresh_cached') as refresh:
             with self.assertRaisesRegex(tree.InputError,'중복 실행'): tree.perform(self.client,request)
         self.assertEqual(len(self.writes()),1); refresh.assert_not_called()
+        self.assertIsNone(cache_store.read('timetree','calendar-a|last-added-label'))
+
+    def test_successful_add_remembers_label_without_fetching_month_or_server(self):
+        request=self.request('event-add')
+        with patch.object(tree,'refresh_cached',return_value=''):
+            tree.perform(self.client,request)
+        with patch.object(tree,'TimeTree') as Client:
+            info=tree.run(dict(action='event-form',calendar_id='calendar-a',date='2027-01-12'))
+        Client.assert_not_called()
+        self.assertEqual(info['form']['label_id'],2)
+        self.assertEqual(tree.event_form(self.client,'calendar-a',None,'2026-11-03')['form']['label_id'],2)
+        self.assertEqual(tree.cached_event_form(dict(calendar_id='calendar-b',date='2026-11-03'))['form']['label_id'],1)
+
+    def test_remembered_label_does_not_override_edit_and_missing_label_is_ignored(self):
+        request=self.cache_request()
+        cache_store.write('timetree','calendar-a|last-added-label',dict(label_id=3))
+        self.assertEqual(tree.cached_event_form(request)['form']['label_id'],2)
+        request['event']=None
+        self.assertEqual(tree.cached_event_form(request)['form']['label_id'],1)
+        for invalid in (True,'2',11):
+            cache_store.write('timetree','calendar-a|last-added-label',dict(label_id=invalid))
+            self.assertEqual(tree.last_added_label('calendar-a',[]),1)
+
+    def test_label_cache_failure_does_not_repeat_successful_add(self):
+        request=self.request('event-add')
+        with patch.object(cache_store,'write',side_effect=OSError('synthetic disk error')),patch.object(tree,'refresh_cached',return_value=''):
+            result=tree.perform(self.client,request)
+        self.assertTrue(result['saved']); self.assertTrue(result['cache_warning'])
+        self.assertEqual(len(self.writes()),1)
 
     def test_acknowledged_write_keeps_success_when_cache_refresh_fails(self):
         request=self.request(); request['form']['title']='수정'
