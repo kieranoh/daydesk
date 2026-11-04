@@ -12,6 +12,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
@@ -39,7 +40,15 @@ sealed class TodoPanel : UserControl, IDisposable {
     int syncMinutes=30;
     bool showAllCategories;
     bool busy, pending, pendingForce, disposed, mutating, refreshAfterBrowser;
-    internal bool HasPendingWrite { get { return mutating; } }
+    TextBox inlineInput;
+    Border inlineEditor;
+    Todo inlineTodo;
+    Goal inlineGoal;
+    DateTime inlineDate;
+    bool inlineUncertain;
+    Button inlineSave,inlineCancel;
+    internal bool HasInlineEditor { get { return inlineInput!=null && inlineDate==selected; } }
+    internal bool HasPendingWrite { get { return mutating || (inlineInput!=null && (inlineTodo==null ? !string.IsNullOrWhiteSpace(inlineInput.Text) : inlineInput.Text!=inlineTodo.Content)); } }
 
     internal static System.Windows.Shapes.Path CreateLogo() {
         return new System.Windows.Shapes.Path { Width=18,Height=22,Margin=new Thickness(0,0,6,0),Stretch=Stretch.Uniform,Fill=Brushes.Black,IsHitTestVisible=false,
@@ -108,7 +117,7 @@ sealed class TodoPanel : UserControl, IDisposable {
         nextSync=syncedAt.AddMinutes(Math.Max(1,syncMinutes));
         status.Text=saved.Data.Source=="mcp" ? "MCP 보조 조회" : ""; return true;
     }
-    internal void ReloadCached() { if(connect) CheckAccount(); TryCached(); Render(); }
+    internal void ReloadCached() { if(inlineInput!=null) { pending=true; return; } if(connect) CheckAccount(); TryCached(); Render(); }
     void CheckAccount() {
         if(client!=null && client.Connected) return;
         if(client!=null) client.Dispose();
@@ -144,6 +153,7 @@ sealed class TodoPanel : UserControl, IDisposable {
     }
     internal void Refresh() {
         if(!connect || disposed) return;
+        if(inlineInput!=null) { pending=pendingForce=true; status.Text="입력을 저장하거나 취소하면 새로고침합니다."; return; }
         if(busy) { pending=pendingForce=true; return; }
         try { CheckAccount(); Render(); } catch { status.Text="Todo Mate 계정 연결을 확인해 주세요."; return; }
         var ignored=Reload(true);
@@ -152,6 +162,7 @@ sealed class TodoPanel : UserControl, IDisposable {
         Render(); status.Text=message;
     }
     async Task Reload(bool force) {
+        if(inlineInput!=null) { pending=true; pendingForce|=force; return; }
         if(!force && TryCached()) return;
         nextSync=DateTime.UtcNow.AddMinutes(Math.Max(1,syncMinutes));
         if(disposed || client==null || !client.Connected) { status.Text="계정 연결을 누르거나 daydesk todo login을 실행해 주세요."; return; }
@@ -227,20 +238,27 @@ sealed class TodoPanel : UserControl, IDisposable {
         if(!Current) { var message=Theme.Text(data==null ? "할 일을 불러오고 있습니다." : "선택한 기간의 할 일을 불러오고 있습니다.",12); message.TextWrapping=TextWrapping.Wrap; list.Children.Add(message); return; }
         var items=VisibleTodos;
         var groups=ListedCategories.ToList();
+        if(HasInlineEditor && groups.All(g=>g.Id!=inlineGoal.Id)) groups.Add(inlineGoal);
         foreach(var goal in groups) {
             var target=goal; var heading=new DockPanel { Margin=new Thickness(0,10,0,6) };
-            var add=Theme.Button("+",async delegate { await Edit(null,target); },goal.Title+"에 할 일 추가"); add.Background=Brushes.Transparent; add.IsEnabled=client!=null && client.Connected; DockPanel.SetDock(add,Dock.Right); heading.Children.Add(add);
+            var add=Theme.Button("+",delegate { BeginInline(null,target); },goal.Title+"에 할 일 추가"); add.Background=Brushes.Transparent; add.IsEnabled=client!=null && client.Connected; DockPanel.SetDock(add,Dock.Right); heading.Children.Add(add);
             var title=new TextBlock { Text=string.IsNullOrWhiteSpace(goal.Title) ? "기본" : goal.Title, Foreground=Theme.Brush("#13272C"), FontSize=12, FontWeight=FontWeights.SemiBold, TextTrimming=TextTrimming.CharacterEllipsis };
             heading.Children.Add(new Border { Child=title, Background=ColorFor(goal.Id), CornerRadius=new CornerRadius(12),Padding=new Thickness(10,5,10,5),VerticalAlignment=VerticalAlignment.Center }); list.Children.Add(heading);
             foreach(var todo in items.Where(t=>t.GoalId==goal.Id)) {
+                if(HasInlineEditor && inlineTodo!=null && inlineTodo.Id==todo.Id) { list.Children.Add(inlineEditor); continue; }
                 var targetTodo=todo; var row=new DockPanel { Margin=new Thickness(0,0,0,4) };
                 Button edit=null; edit=Theme.Button("···",delegate { ShowActions(targetTodo,target,edit); },todo.Content+" 작업"); edit.Background=Brushes.Transparent; edit.Padding=new Thickness(4); DockPanel.SetDock(edit,Dock.Right); row.Children.Add(edit);
                 var done=new CheckBox { IsChecked=todo.Done, VerticalAlignment=VerticalAlignment.Top,Margin=new Thickness(0,2,6,0),IsEnabled=client!=null };
                 AutomationProperties.SetName(done,todo.Content+" 완료 상태");
                 done.Click+=async delegate { bool desired=done.IsChecked==true; done.IsChecked=targetTodo.Done; await SetDone(targetTodo,desired); };
                 DockPanel.SetDock(done,Dock.Left); row.Children.Add(done);
-                var content=Theme.Text(todo.Content,13); content.TextWrapping=TextWrapping.Wrap; content.Margin=new Thickness(0,4,0,4); if(todo.Done) content.TextDecorations=TextDecorations.Strikethrough; row.Children.Add(content); list.Children.Add(row);
+                var content=Theme.Text(todo.Content,13); content.TextWrapping=TextWrapping.Wrap; content.Margin=new Thickness(0,4,0,4); if(todo.Done) content.TextDecorations=TextDecorations.Strikethrough;
+                content.Focusable=true; content.ToolTip="더블클릭 또는 F2로 내용 수정";
+                content.MouseLeftButtonDown+=delegate(object sender,MouseButtonEventArgs e) { if(e.ClickCount==2) { BeginInline(targetTodo,target); e.Handled=true; } };
+                content.KeyDown+=delegate(object sender,KeyEventArgs e) { if(e.Key==Key.F2 || e.Key==Key.Enter) { BeginInline(targetTodo,target); e.Handled=true; } };
+                row.Children.Add(content); list.Children.Add(row);
             }
+            if(HasInlineEditor && inlineGoal.Id==goal.Id && (inlineTodo==null || items.All(t=>t.Id!=inlineTodo.Id))) list.Children.Add(inlineEditor);
         }
         if(groups.Count==0) { var empty=Theme.Text("표시할 할 일이 없습니다.",12); empty.Margin=new Thickness(0,10,0,0); list.Children.Add(empty); }
         scroll.ScrollToVerticalOffset(offset);
@@ -275,7 +293,7 @@ sealed class TodoPanel : UserControl, IDisposable {
         var menu=ActionMenu(addButton);
         foreach(var goal in data.Goals) {
             var target=goal; var item=ActionItem(string.IsNullOrWhiteSpace(goal.Title) ? "기본" : goal.Title);
-            item.Click+=async delegate { await Edit(null,target); }; menu.Items.Add(item);
+            item.Click+=delegate { BeginInline(null,target); }; menu.Items.Add(item);
         }
         if(menu.Items.Count==0) { status.Text="Todo Mate에서 추가할 카테고리를 먼저 만들어 주세요."; return; }
         menu.IsOpen=true;
@@ -283,7 +301,11 @@ sealed class TodoPanel : UserControl, IDisposable {
     void ShowActions(Todo todo,Goal goal,FrameworkElement anchor) {
         var menu=ActionMenu(anchor);
         var change=ActionItem("수정"); change.IsEnabled=client!=null && client.Connected;
-        change.Click+=async delegate { await Edit(todo,goal); }; menu.Items.Add(change);
+        change.Click+=delegate { BeginInline(todo,goal); }; menu.Items.Add(change);
+        var postpone=ActionItem(todo.Date.Date==DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(9)).Date ? "내일로 미루기" : "다음 날로 미루기"); postpone.IsEnabled=client!=null && client.Connected;
+        postpone.Click+=async delegate { await Postpone(todo); }; menu.Items.Add(postpone);
+        var details=ActionItem("날짜·카테고리·알림"); details.IsEnabled=client!=null && client.Connected;
+        details.Click+=async delegate { await Edit(todo,goal); }; menu.Items.Add(details);
         var remove=ActionItem("삭제",true); remove.IsEnabled=client!=null && client.Connected; remove.Click+=async delegate { await Delete(todo); }; menu.Items.Add(remove);
         var original=ActionItem("Todo Mate에서 열기 ↗");
         original.Click+=delegate { OpenOriginal(todo.Content); }; menu.Items.Add(original); menu.IsOpen=true;
@@ -292,6 +314,95 @@ sealed class TodoPanel : UserControl, IDisposable {
         if(ConnectRequested!=null) { ConnectRequested(); return; }
         try { Process.Start(new ProcessStartInfo(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"FirebaseAccount.exe")) { UseShellExecute=true }); refreshAfterBrowser=true; }
         catch { status.Text="Firebase 계정 연결 창을 열지 못했습니다."; }
+    }
+    void InlineFocus(bool focus) {
+        var owner=Window.GetWindow(this) as CalendarWindow;
+        if(owner!=null) owner.InlineInputChanged(focus);
+        if(focus && inlineInput!=null) Dispatcher.BeginInvoke(DispatcherPriority.Input,new Action(delegate {
+            if(inlineInput==null || !HasInlineEditor) return;
+            inlineInput.Focus(); Keyboard.Focus(inlineInput); inlineInput.CaretIndex=inlineInput.Text.Length; inlineInput.BringIntoView();
+        }));
+    }
+    internal void BeginInline(Todo todo,Goal goal) {
+        if(busy || disposed || client==null || !client.Connected || !Current) return;
+        if(inlineInput!=null) { InlineFocus(true); status.Text="작성 중인 내용을 저장하거나 취소해 주세요."; return; }
+        inlineTodo=todo; inlineGoal=goal; inlineDate=selected; inlineUncertain=false; timer.Stop();
+        inlineInput=new TextBox { Text=todo==null ? "" : todo.Content,FontSize=13,MinLines=1,MaxLines=3,MinHeight=30,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,
+            Padding=new Thickness(7,5,7,5),Foreground=Theme.Brush("#25272B"),Background=Theme.Brush("#F4FFFFFF"),BorderBrush=ColorFor(goal.Id),CaretBrush=Theme.Brush("#168B56"),BorderThickness=new Thickness(1) };
+        AutomationProperties.SetName(inlineInput,todo==null ? "새 할 일 내용" : "목록에서 할 일 내용 수정");
+        inlineInput.ToolTip="Enter 저장 · Shift+Enter 줄바꿈 · Esc 취소\n다른 곳을 클릭해도 저장됩니다.";
+        var body=new StackPanel(); body.Children.Add(inlineInput);
+        var actions=new StackPanel { Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right,Margin=new Thickness(0,3,0,0) };
+        inlineSave=Theme.Button(todo==null ? "추가" : "저장",async delegate { await SaveInline(todo==null); }); inlineSave.FontSize=11; inlineSave.Padding=new Thickness(7,3,7,3); actions.Children.Add(inlineSave);
+        inlineCancel=Theme.Button("취소",CloseInline); inlineCancel.FontSize=11; inlineCancel.Padding=new Thickness(7,3,7,3); actions.Children.Add(inlineCancel); body.Children.Add(actions);
+        inlineEditor=new Border { Child=body,Margin=new Thickness(25,2,0,8),Padding=new Thickness(0),CornerRadius=new CornerRadius(6) };
+        var editor=inlineEditor;
+        inlineInput.PreviewKeyDown+=async delegate(object sender,KeyEventArgs e) {
+            if(e.Key==Key.Escape) { e.Handled=true; CloseInline(); }
+            else if(e.Key==Key.Enter && (Keyboard.Modifiers&ModifierKeys.Shift)==0) { e.Handled=true; if(!e.IsRepeat) await SaveInline(todo==null); }
+        };
+        inlineInput.LostKeyboardFocus+=delegate {
+            Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(async delegate {
+                if(inlineEditor!=editor || busy || disposed || inlineUncertain || editor.IsKeyboardFocusWithin) return;
+                if(string.IsNullOrWhiteSpace(inlineInput.Text)) CloseInline(); else await SaveInline(false);
+            }));
+        };
+        RenderList(); InlineFocus(true); status.Text="Enter 저장 · Shift+Enter 줄바꿈 · Esc 취소";
+    }
+    internal void CloseInline() {
+        if(busy || inlineInput==null) return;
+        bool uncertain=inlineUncertain;
+        inlineInput=null; inlineEditor=null; inlineSave=inlineCancel=null; inlineTodo=null; inlineGoal=null; inlineUncertain=false;
+        InlineFocus(false); Render(); if(connect) timer.Start();
+        if(uncertain) pending=pendingForce=true;
+        if(pending && connect && !disposed) { bool force=pendingForce; pending=pendingForce=false; var ignored=Reload(force); }
+    }
+    internal async Task SaveInline(bool keepAdding) {
+        if(busy || disposed || inlineInput==null || inlineUncertain) return;
+        string content=inlineInput.Text.Trim();
+        if(content=="") { status.Text="할 일 내용을 입력해 주세요."; InlineFocus(true); return; }
+        if(inlineTodo!=null && content==inlineTodo.Content) { CloseInline(); return; }
+        var editor=inlineEditor; var todo=inlineTodo; var goal=inlineGoal; var day=inlineDate;
+        busy=mutating=true; list.IsEnabled=false; status.Text="저장 중…";
+        bool saved=false; string warning=null;
+        try {
+            using(await TodoSnapshots.Enter()) {
+                var updated=todo==null ? await client.Add(goal.Id,content,day) : await client.Update(todo.Id,content:content);
+                saved=true; updated.Category=goal.Title;
+                int index=data.Todos.FindIndex(t=>t.Id==updated.Id); if(index<0) data.Todos.Add(updated); else data.Todos[index]=updated;
+                try { TodoSnapshots.Patch(updated); if(TodoSnapshots.Read(updated.Date)==null) TodoSnapshots.SaveDay(await client.LoadRange(updated.Date,updated.Date),updated.Date); }
+                catch { warning="서버 저장은 완료되었습니다. 캐시 갱신을 위해 새로고침해 주세요."; }
+            }
+        } catch(Exception error) {
+            inlineUncertain=true; inlineInput.IsReadOnly=true; inlineSave.IsEnabled=false; inlineCancel.Content="닫기";
+            status.Text="새로고침으로 저장 여부를 확인한 뒤 다시 시도해 주세요. "+error.Message;
+        } finally { busy=mutating=false; if(!disposed) list.IsEnabled=true; }
+        if(disposed || !saved || inlineEditor!=editor) return;
+        if(keepAdding && todo==null && selected==day) { inlineInput.Clear(); Render(); InlineFocus(true); }
+        else CloseInline();
+        status.Text=warning ?? "저장했습니다.";
+    }
+    internal async Task Postpone(Todo todo) {
+        if(busy || disposed || inlineInput!=null || client==null || !client.Connected) return;
+        DateTime next=todo.Date.AddDays(1),when; DateTime? reminder=null;
+        bool hasReminder=!string.IsNullOrWhiteSpace(todo.Reminder);
+        if(hasReminder) {
+            if(!DateTime.TryParseExact(todo.Reminder,"yyyy-MM-ddTHH:mm",CultureInfo.InvariantCulture,DateTimeStyles.None,out when)) { status.Text="알림 시간을 확인한 뒤 다시 미뤄 주세요."; return; }
+            reminder=when.AddDays(1);
+        }
+        busy=mutating=true; list.IsEnabled=false; string warning=null;
+        try {
+            using(await TodoSnapshots.Enter()) {
+                var updated=await client.Update(todo.Id,date:next,changeReminder:hasReminder,reminder:reminder);
+                var goal=data.Goals.FirstOrDefault(g=>g.Id==updated.GoalId); updated.Category=goal==null ? todo.Category : goal.Title;
+                data.Todos.RemoveAll(t=>t.Id==updated.Id); data.Todos.Add(updated);
+                try { TodoSnapshots.Patch(updated); if(TodoSnapshots.Read(updated.Date)==null) TodoSnapshots.SaveDay(await client.LoadRange(updated.Date,updated.Date),updated.Date); }
+                catch { warning="서버 이동은 완료되었습니다. 캐시 갱신을 위해 새로고침해 주세요."; }
+            }
+            Render(); status.Text=warning ?? next.ToString("M월 d일")+"로 미뤘습니다.";
+        } catch(Exception error) { status.Text="새로고침으로 이동 여부를 확인해 주세요. "+error.Message; }
+        finally { busy=mutating=false; if(!disposed) list.IsEnabled=true; }
+        if(pending && !disposed) { bool force=pendingForce; pending=pendingForce=false; await Reload(force); }
     }
     async Task Delete(Todo todo) {
         if(busy || client==null || disposed) return;

@@ -70,15 +70,17 @@ public partial class CalendarWindow : Window {
     [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")] static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
     [StructLayout(LayoutKind.Sequential)] struct WindowPosition { internal IntPtr Window,After; internal int X,Y,Width,Height; internal uint Flags; }
     void UpdateBackActivation() {
-        ShowActivated=!pinBack;
+        bool suppress=pinBack && (todoPanel==null || !todoPanel.HasInlineEditor);
+        ShowActivated=!suppress;
         var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
         if(handle==IntPtr.Zero) return;
         long style=GetWindowLongPtr(handle,-20).ToInt64();
-        SetWindowLongPtr(handle,-20,new IntPtr(pinBack ? style|0x08000000L : style&~0x08000000L));
+        SetWindowLongPtr(handle,-20,new IntPtr(suppress ? style|0x08000000L : style&~0x08000000L));
     }
+    internal void InlineInputChanged(bool focus) { UpdateBackActivation(); if(focus) Activate(); else PlaceBehind(); }
     IntPtr BackWindowMessage(IntPtr window,int message,IntPtr wParam,IntPtr lParam,ref bool handled) {
         if(!pinBack || closing) return IntPtr.Zero;
-        if(message==0x0021) { handled=true; return new IntPtr(3); } // MA_NOACTIVATE keeps the click usable.
+        if(message==0x0021 && (todoPanel==null || !todoPanel.HasInlineEditor)) { handled=true; return new IntPtr(3); } // MA_NOACTIVATE keeps the click usable.
         if(message==0x0046 && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
             var position=(WindowPosition)Marshal.PtrToStructure(lParam,typeof(WindowPosition));
             if((position.Flags&0x0004)==0) position.After=new IntPtr(1);
