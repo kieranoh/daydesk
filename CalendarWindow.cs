@@ -239,9 +239,12 @@ public partial class CalendarWindow : Window {
         arrows.Children.Add(Btn("‹",delegate { Navigate(-1); })); arrows.Children.Add(Btn("›",delegate { Navigate(1); })); arrows.Children.Add(Btn("오늘",delegate { expandedWeekStart=null; selected=anchor=Today(); Refresh(); }));
         Grid.SetColumn(arrows,1); nav.Children.Add(arrows);
         var main=mainArea; main.ColumnDefinitions.Add(calendarColumn); main.ColumnDefinitions.Add(new ColumnDefinition { Width=new GridLength(12) }); main.ColumnDefinitions.Add(todoColumn);
+        Grid.SetIsSharedSizeScope(main,true);
         Grid.SetRow(main,2); layout.Children.Add(main); main.Children.Add(calendar);
+        var sideArea=new Grid(); sideArea.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto,SharedSizeGroup="PaneHeading" }); sideArea.RowDefinitions.Add(new RowDefinition());
+        Grid.SetColumn(sideArea,2); main.Children.Add(sideArea);
         var side=new Border { CornerRadius=new CornerRadius(8), Background=Brush("#100D2336"), BorderBrush=Brush("#20FFFFFF"), BorderThickness=new Thickness(1), Padding=new Thickness(12) };
-        Grid.SetColumn(side,2); main.Children.Add(side);
+        Grid.SetRow(side,1); sideArea.Children.Add(side);
         var divider=new GridSplitter { Width=12,HorizontalAlignment=HorizontalAlignment.Stretch,VerticalAlignment=VerticalAlignment.Stretch,ResizeDirection=GridResizeDirection.Columns,ResizeBehavior=GridResizeBehavior.PreviousAndNext,Background=Brushes.Transparent,Cursor=Cursors.SizeWE,KeyboardIncrement=12,DragIncrement=1,ToolTip="드래그하거나 방향키로 Todo Mate 폭 조절" };
         AutomationProperties.SetName(divider,"Todo Mate 폭 조절");
         var handle=new FrameworkElementFactory(typeof(Border),"Handle"); handle.SetValue(Border.BackgroundProperty,Brush("#50FFFFFF")); handle.SetValue(Border.WidthProperty,3.0); handle.SetValue(Border.HeightProperty,38.0); handle.SetValue(Border.CornerRadiusProperty,new CornerRadius(2)); handle.SetValue(Border.HorizontalAlignmentProperty,HorizontalAlignment.Center); handle.SetValue(Border.VerticalAlignmentProperty,VerticalAlignment.Center);
@@ -253,12 +256,13 @@ public partial class CalendarWindow : Window {
         divider.KeyUp+=delegate { SetTodoWidth(todoColumn.ActualWidth); ScheduleSave(); };
         main.SizeChanged+=delegate { if(todoVisible) todoColumn.Width=new GridLength(Math.Min(todoWidth,MaxTodoWidth)); };
         todoPanel=new TodoPanel(selected,SelectFromTodo,connect); side.Child=todoPanel;
+        sideArea.Children.Add(todoPanel.HeaderControls);
         todoPanel.ConnectRequested=delegate { ShowSettings(true); };
         todoPanel.SetSyncMinutes(syncMinutes);
         var categoryControls=new ScrollViewer { Content=todoPanel.CategoryControls,MaxHeight=94,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Margin=new Thickness(12,0,0,0),VerticalAlignment=VerticalAlignment.Center };
         var todoOptions=new StackPanel { Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Center };
         todoOptions.Children.Add(todoSwitch); todoOptions.Children.Add(categoryControls); Grid.SetColumn(todoOptions,2); nav.Children.Add(todoOptions);
-        todoSide=side; todoDivider=divider; todoCategories=categoryControls; SetTodoVisible(todoVisible);
+        todoSide=sideArea; todoDivider=divider; todoCategories=categoryControls; SetTodoVisible(todoVisible);
         var footer=new DockPanel { Margin=new Thickness(0,10,0,0) }; Grid.SetRow(footer,3); layout.Children.Add(footer);
         var resize=new Thumb { Width=18, Height=18, Cursor=Cursors.SizeNWSE, Background=Brush("#01FFFFFF") };
         var grip=new FrameworkElementFactory(typeof(TextBlock)); grip.SetValue(TextBlock.TextProperty,"⋰"); grip.SetValue(TextBlock.ForegroundProperty,Brush("#AAFFFFFF")); resize.Template=new ControlTemplate(typeof(Thumb)) { VisualTree=grip };
@@ -527,7 +531,7 @@ public partial class CalendarWindow : Window {
     }
     void DrawMonth() {
         var days=A(model,"days").Select(x=>DateTime.Parse((string)x,CultureInfo.InvariantCulture)).ToArray();
-        calendar.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto });
+        calendar.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto,SharedSizeGroup="PaneHeading" });
         var header=new UniformGrid { Columns=7 };
         for(int c=0;c<7;c++) { var t=Text("일월화수목금토"[c].ToString(),12,false); t.HorizontalAlignment=HorizontalAlignment.Center; t.Margin=new Thickness(0,0,0,10); if(c==0)t.Foreground=Brush("#FFB9C0"); if(c==6)t.Foreground=Brush("#B0D0FF"); header.Children.Add(t); }
         calendar.Children.Add(header);
@@ -737,6 +741,10 @@ public partial class CalendarWindow : Window {
         window.calendars.ItemsSource=new[]{"캘린더"}; window.calendars.SelectedIndex=0; window.status.Text="디자인 검증용 샘플 일정";
         var content=(FrameworkElement)window.Content; window.Content=null;
         window.SetTransparency(20); LayoutForTest(content);
+        var todoCard=((Grid)window.todoSide).Children.OfType<Border>().Single();
+        double calendarTop=window.calendar.TransformToAncestor(content).Transform(new Point()).Y+window.calendar.RowDefinitions[0].ActualHeight;
+        double todoTop=todoCard.TransformToAncestor(content).Transform(new Point()).Y;
+        Check(Math.Abs(calendarTop-todoTop)<1 && window.todoPanel.HeaderControls.TransformToAncestor(content).Transform(new Point()).Y<todoTop,"Calendar grid and Todo card top edges are not aligned or Todo heading remained inside the card");
         Check(!Descendants<Button>(content).Any(b=>Object.Equals(b.Content,"월간") || Object.Equals(b.Content,"주간")),"View mode buttons are still visible");
         Check(!Descendants<Button>(content).Any(b=>AutomationProperties.GetName(b)=="최소화"),"Minimize button is still visible");
         Check(Descendants<GridSplitter>(content).Count()==1,"Todo pane has no resize divider");

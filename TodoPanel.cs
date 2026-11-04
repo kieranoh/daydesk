@@ -30,6 +30,7 @@ sealed class TodoPanel : UserControl, IDisposable {
     readonly ScrollViewer scroll;
     readonly Button addButton,loginButton;
     internal FrameworkElement CategoryControls { get { return categories; } }
+    internal FrameworkElement HeaderControls { get; private set; }
     readonly DispatcherTimer timer=new DispatcherTimer { Interval=TimeSpan.FromMinutes(1) };
     readonly HashSet<string> hidden=new HashSet<string>();
     readonly string[] palette={"#BCA5F3","#56C4EC","#54CEC6","#F4BB80","#F292BC","#90B5F5","#C9AAE0","#B0CF86"};
@@ -57,8 +58,8 @@ sealed class TodoPanel : UserControl, IDisposable {
         selected=day.Date; select=onSelect; connect=connectAccount;
         if(connect) ReadPreferences();
         var layout=new Grid(); Content=layout;
-        for(int i=0;i<5;i++) layout.RowDefinitions.Add(new RowDefinition { Height=i==3 ? new GridLength(1,GridUnitType.Star) : GridLength.Auto });
-        var header=new DockPanel { Margin=new Thickness(0,0,0,9) }; layout.Children.Add(header);
+        for(int i=0;i<4;i++) layout.RowDefinitions.Add(new RowDefinition { Height=i==2 ? new GridLength(1,GridUnitType.Star) : GridLength.Auto });
+        var header=new DockPanel { Margin=new Thickness(12,0,12,10) }; HeaderControls=header;
         var refresh=Theme.Button("↻",Refresh,"Todo Mate 새로고침"); DockPanel.SetDock(refresh,Dock.Right); header.Children.Add(refresh);
         addButton=Theme.Button("+",ChooseCategory,"할 일 추가"); DockPanel.SetDock(addButton,Dock.Right); header.Children.Add(addButton);
         var original=Theme.Button("원본 편집 ↗",delegate { OpenOriginal(""); },"기본 브라우저의 Todo Mate에서 추가·내용 수정·삭제"); original.ToolTip="기존 브라우저에서 Todo Mate 열기"; original.FontSize=11; original.Padding=new Thickness(6,5,6,5); DockPanel.SetDock(original,Dock.Right); header.Children.Add(original);
@@ -68,13 +69,13 @@ sealed class TodoPanel : UserControl, IDisposable {
         DockPanel.SetDock(logo,Dock.Left); brand.Children.Add(logo);
         var brandTitle=Theme.Text("Todo Mate",18,true); brandTitle.Foreground=Brushes.Black; brandTitle.Effect=null; brand.Children.Add(brandTitle);
         header.Children.Add(brand);
-        var navigation=new DockPanel(); Grid.SetRow(navigation,1); layout.Children.Add(navigation);
+        var navigation=new DockPanel(); Grid.SetRow(navigation,0); layout.Children.Add(navigation);
         var next=Theme.Button("›",delegate { select(selected.AddDays(7)); },"다음 주 할 일"); DockPanel.SetDock(next,Dock.Right); navigation.Children.Add(next);
         var previous=Theme.Button("‹",delegate { select(selected.AddDays(-7)); },"이전 주 할 일"); DockPanel.SetDock(previous,Dock.Left); navigation.Children.Add(previous); navigation.Children.Add(dateTitle);
-        week.Margin=new Thickness(0,4,0,10); Grid.SetRow(week,2); layout.Children.Add(week);
+        week.Margin=new Thickness(0,4,0,10); Grid.SetRow(week,1); layout.Children.Add(week);
         scroll=new ScrollViewer { Content=list, VerticalScrollBarVisibility=ScrollBarVisibility.Auto, HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled };
-        Grid.SetRow(scroll,3); layout.Children.Add(scroll);
-        status.TextWrapping=TextWrapping.Wrap; status.Margin=new Thickness(0,8,0,0); Grid.SetRow(status,4); layout.Children.Add(status);
+        Grid.SetRow(scroll,2); layout.Children.Add(scroll);
+        status.TextWrapping=TextWrapping.Wrap; status.Margin=new Thickness(0,8,0,0); Grid.SetRow(status,3); layout.Children.Add(status);
         timer.Tick+=delegate { if(syncMinutes>0 && DateTime.UtcNow>=nextSync) Refresh(); };
         if(connect) Loaded+=async delegate {
             if(disposed) return;

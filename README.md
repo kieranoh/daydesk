@@ -39,7 +39,7 @@ TimeTree는 기본으로 기준 월의 앞뒤 6개월을 포함한 13개월을 �
 
 **Windows 10 1809 이상 또는 Windows 11의 x64 환경**을 대상으로 합니다. .NET Framework 4.6.2 이상이 필요합니다.
 
-1. [Releases](https://github.com/kieranoh/daydesk/releases/latest)에서 `Daydesk-Setup-1.3.5-x64.exe`를 받습니다.
+1. [Releases](https://github.com/kieranoh/daydesk/releases/latest)에서 `Daydesk-Setup-1.3.6-x64.exe`를 받습니다.
 2. 설치 경로를 선택합니다.
 3. 바탕화면 바로가기, Windows 로그인 시 자동 실행, CLI를 PATH에 추가할지 선택합니다.
 4. 설치를 마치고 Daydesk를 실행합니다.
@@ -47,7 +47,7 @@ TimeTree는 기본으로 기준 월의 앞뒤 6개월을 포함한 13개월을 �
 설치파일은 전자서명되어 있지 않습니다. 같은 릴리스의 `.sha256` 파일로 다운로드한 파일을 확인할 수 있습니다.
 
 ```powershell
-Get-FileHash .\Daydesk-Setup-1.3.5-x64.exe -Algorithm SHA256
+Get-FileHash .\Daydesk-Setup-1.3.6-x64.exe -Algorithm SHA256
 ```
 
 ### 업데이트
@@ -99,6 +99,7 @@ Todo Mate가 사용하는 Firebase에 본인 계정으로 연결합니다. 사�
 - **내용 수정:** 할 일을 더블클릭하거나 키보드로 선택한 뒤 F2를 누르면 기존 배경·글자·줄 위치 그대로 텍스트만 수정합니다. Enter로 저장하고 Esc로 취소합니다. 완료 상태와 기존 순서는 유지합니다.
 - **달력 월 이동:** 이전·다음 달을 둘러보아도 투두메이트의 날짜와 목록은 유지됩니다. 달력의 특정 날짜를 직접 누르면 해당 날짜의 할 일로 바뀝니다.
 - **투두 사이드 패널:** **전체 카테고리** 옆의 **투두** 토글을 끄면 달력이 전체 너비를 사용합니다. 토글은 계속 표시되며, 다시 켜면 기존 폭과 선택 날짜로 돌아옵니다. 표시 상태는 재실행 후에도 유지됩니다. CLI에서는 `daydesk settings --todo-visible off` 또는 `on`으로 전환합니다.
+- **좌우 정렬:** Todo Mate 로고·도구는 박스 위에 표시하고, 할 일 박스의 윗선과 달력 날짜 격자의 윗선을 맞춥니다.
 - **TimeTree 추가 라벨:** 마지막으로 추가에 성공한 라벨을 계정·캘린더별 암호화 캐시에 기억하고 다음 일정 추가 시 자동 선택합니다. 기존 일정 편집 시에는 원래 라벨을 유지합니다.
 - **미루기:** **··· → 내일로 미루기**를 누르면 다음 날로 이동합니다. 오늘이 아닌 날짜에는 **다음 날로 미루기**로 표시하며 알림도 하루 뒤로 옮깁니다. 날짜·카테고리·알림은 같은 메뉴의 별도 항목에서 설정합니다. 완료 처리는 목록의 체크박스로 합니다.
 - **혼잡한 주:** **전체 보기**로 그 주의 모든 일정을 펼칩니다.
@@ -211,7 +212,7 @@ TimeTree 계정 연결도 앱의 설정에서 진행합니다. 개인 Codex 설�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\packaging\build_release.ps1
 ```
 
-빌드 도구는 공식 배포처에서 Python·Node 런타임과 Inno Setup을 받아 `build/`에 준비합니다. 생성되는 파일은 `dist/Daydesk-Setup-1.3.5-x64.exe`입니다. 빌드 전에 커밋된 기본 설정을 사용하며 빌드한 사람의 로그인 정보나 일정 캐시는 복사하지 않습니다.
+빌드 도구는 공식 배포처에서 Python·Node 런타임과 Inno Setup을 받아 `build/`에 준비합니다. 생성되는 파일은 `dist/Daydesk-Setup-1.3.6-x64.exe`입니다. 빌드 전에 커밋된 기본 설정을 사용하며 빌드한 사람의 로그인 정보나 일정 캐시는 복사하지 않습니다.
 
 <details>
 <summary>코드 구성과 테스트</summary>

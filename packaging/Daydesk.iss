@@ -1,4 +1,4 @@
-#define AppVersion "1.3.5"
+#define AppVersion "1.3.6"
 #define Payload "..\build\bundle"
 
 [Setup]
@@ -27,7 +27,7 @@ ChangesEnvironment=yes
 CloseApplications=yes
 RestartApplications=no
 AppMutex=Local\TimeTreeDesktopWidgetNative
-VersionInfoVersion=1.3.5.0
+VersionInfoVersion=1.3.6.0
 UninstallDisplayName=Daydesk · TimeTree + Todo Mate
 
 [Languages]

@@ -22,7 +22,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Payload privacy audit failed.' }
     & (Join-Path $taskRoot 'build\tools\Inno\ISCC.exe') (Join-Path $PSScriptRoot 'Daydesk.iss')
     if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
-    $installer=Join-Path $taskRoot 'dist\Daydesk-Setup-1.3.5-x64.exe'
+    $installer=Join-Path $taskRoot 'dist\Daydesk-Setup-1.3.6-x64.exe'
     & python -c "import hashlib,pathlib,sys; p=pathlib.Path(sys.argv[1]); line=hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name; p.with_suffix(p.suffix+'.sha256').write_text(line+'\n',encoding='ascii'); print(line)" $installer
     if ($LASTEXITCODE -ne 0) { throw 'Installer checksum failed.' }
 } finally { Pop-Location }
