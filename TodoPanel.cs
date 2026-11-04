@@ -46,7 +46,6 @@ sealed class TodoPanel : UserControl, IDisposable {
     Goal inlineGoal;
     DateTime inlineDate;
     bool inlineUncertain;
-    Button inlineSave,inlineCancel;
     internal bool HasInlineEditor { get { return inlineInput!=null && inlineDate==selected; } }
     internal bool HasPendingWrite { get { return mutating || (inlineInput!=null && (inlineTodo==null ? !string.IsNullOrWhiteSpace(inlineInput.Text) : inlineInput.Text!=inlineTodo.Content)); } }
 
@@ -328,25 +327,15 @@ sealed class TodoPanel : UserControl, IDisposable {
         if(busy || disposed || client==null || !client.Connected || !Current) return;
         if(inlineInput!=null) { InlineFocus(true); status.Text="작성 중인 내용을 저장하거나 취소해 주세요."; return; }
         inlineTodo=todo; inlineGoal=goal; inlineDate=selected; inlineUncertain=false; timer.Stop();
-        inlineInput=new TextBox { Text=todo==null ? "" : todo.Content,FontSize=13,MinLines=1,MaxLines=3,MinHeight=30,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,
-            Padding=new Thickness(7,5,7,5),Foreground=Theme.Brush("#25272B"),Background=Theme.Brush("#F4FFFFFF"),BorderBrush=ColorFor(goal.Id),CaretBrush=Theme.Brush("#168B56"),BorderThickness=new Thickness(1) };
+        var text=Theme.Text("",13);
+        inlineInput=new TextBox { Text=todo==null ? "" : todo.Content,FontSize=13,MinLines=1,MaxLines=3,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,
+            Padding=new Thickness(0),Foreground=text.Foreground,Background=Brushes.Transparent,CaretBrush=text.Foreground,BorderThickness=new Thickness(0),Effect=text.Effect,VerticalAlignment=VerticalAlignment.Center };
+        if(todo!=null && todo.Done) inlineInput.TextDecorations=TextDecorations.Strikethrough;
+        var host=new FrameworkElementFactory(typeof(ScrollViewer),"PART_ContentHost");
+        inlineInput.Template=new ControlTemplate(typeof(TextBox)) { VisualTree=host };
         AutomationProperties.SetName(inlineInput,todo==null ? "새 할 일 내용" : "목록에서 할 일 내용 수정");
         inlineInput.ToolTip="Enter 저장 · Shift+Enter 줄바꿈 · Esc 취소\n다른 곳을 클릭해도 저장됩니다.";
-        var body=new StackPanel(); body.Children.Add(inlineInput);
-        var actions=new StackPanel { Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right,Margin=new Thickness(0,3,0,0) };
-        inlineSave=Theme.Button(todo==null ? "추가" : "저장",async delegate { await SaveInline(todo==null); }); inlineSave.FontSize=11; inlineSave.Padding=new Thickness(7,3,7,3); actions.Children.Add(inlineSave);
-        inlineCancel=Theme.Button("취소",CloseInline); inlineCancel.FontSize=11; inlineCancel.Padding=new Thickness(7,3,7,3); actions.Children.Add(inlineCancel); body.Children.Add(actions);
-        inlineEditor=new Border { Child=body,Margin=new Thickness(25,2,0,8),Padding=new Thickness(0),CornerRadius=new CornerRadius(6) };
-        if(todo!=null) {
-            var text=Theme.Text(todo.Content,13);
-            inlineInput.Background=Brushes.Transparent; inlineInput.BorderThickness=new Thickness(0); inlineInput.Padding=new Thickness(0); inlineInput.MinHeight=0;
-            inlineInput.Foreground=text.Foreground; inlineInput.CaretBrush=text.Foreground; inlineInput.Effect=text.Effect;
-            if(todo.Done) inlineInput.TextDecorations=TextDecorations.Strikethrough;
-            inlineInput.VerticalAlignment=VerticalAlignment.Center;
-            var host=new FrameworkElementFactory(typeof(ScrollViewer),"PART_ContentHost");
-            inlineInput.Template=new ControlTemplate(typeof(TextBox)) { VisualTree=host };
-            body.Children.Remove(inlineInput); inlineEditor.Child=inlineInput; inlineEditor.Margin=new Thickness(0,4,0,4);
-        }
+        inlineEditor=new Border { Child=inlineInput,Margin=todo==null ? new Thickness(25,4,28,3) : new Thickness(0,4,0,3),BorderBrush=Theme.Brush("#802ECC87"),BorderThickness=new Thickness(0,0,0,1) };
         var editor=inlineEditor;
         inlineInput.PreviewKeyDown+=async delegate(object sender,KeyEventArgs e) {
             if(e.Key==Key.Escape) { e.Handled=true; CloseInline(); }
@@ -363,7 +352,7 @@ sealed class TodoPanel : UserControl, IDisposable {
     internal void CloseInline() {
         if(busy || inlineInput==null) return;
         bool uncertain=inlineUncertain;
-        inlineInput=null; inlineEditor=null; inlineSave=inlineCancel=null; inlineTodo=null; inlineGoal=null; inlineUncertain=false;
+        inlineInput=null; inlineEditor=null; inlineTodo=null; inlineGoal=null; inlineUncertain=false;
         InlineFocus(false); Render(); if(connect) timer.Start();
         if(uncertain) pending=pendingForce=true;
         if(pending && connect && !disposed) { bool force=pendingForce; pending=pendingForce=false; var ignored=Reload(force); }
@@ -385,8 +374,8 @@ sealed class TodoPanel : UserControl, IDisposable {
                 catch { warning="서버 저장은 완료되었습니다. 캐시 갱신을 위해 새로고침해 주세요."; }
             }
         } catch(Exception error) {
-            inlineUncertain=true; inlineInput.IsReadOnly=true; inlineSave.IsEnabled=false; inlineCancel.Content="닫기";
-            status.Text="새로고침으로 저장 여부를 확인한 뒤 다시 시도해 주세요. "+error.Message;
+            inlineUncertain=true; inlineInput.IsReadOnly=true;
+            status.Text="Esc로 닫고 새로고침하여 저장 여부를 확인해 주세요. "+error.Message;
         } finally { busy=mutating=false; if(!disposed) list.IsEnabled=true; }
         if(disposed || !saved || inlineEditor!=editor) return;
         if(keepAdding && todo==null && selected==day) { inlineInput.Clear(); Render(); InlineFocus(true); }

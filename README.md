@@ -39,7 +39,7 @@ TimeTree는 기본으로 기준 월의 앞뒤 6개월을 포함한 13개월을 �
 
 **Windows 10 1809 이상 또는 Windows 11의 x64 환경**을 대상으로 합니다. .NET Framework 4.6.2 이상이 필요합니다.
 
-1. [Releases](https://github.com/kieranoh/daydesk/releases/latest)에서 `Daydesk-Setup-1.3.1-x64.exe`를 받습니다.
+1. [Releases](https://github.com/kieranoh/daydesk/releases/latest)에서 `Daydesk-Setup-1.3.2-x64.exe`를 받습니다.
 2. 설치 경로를 선택합니다.
 3. 바탕화면 바로가기, Windows 로그인 시 자동 실행, CLI를 PATH에 추가할지 선택합니다.
 4. 설치를 마치고 Daydesk를 실행합니다.
@@ -47,7 +47,7 @@ TimeTree는 기본으로 기준 월의 앞뒤 6개월을 포함한 13개월을 �
 설치파일은 전자서명되어 있지 않습니다. 같은 릴리스의 `.sha256` 파일로 다운로드한 파일을 확인할 수 있습니다.
 
 ```powershell
-Get-FileHash .\Daydesk-Setup-1.3.1-x64.exe -Algorithm SHA256
+Get-FileHash .\Daydesk-Setup-1.3.2-x64.exe -Algorithm SHA256
 ```
 
 ### 업데이트
@@ -95,7 +95,7 @@ Todo Mate가 사용하는 Firebase에 본인 계정으로 연결합니다. 사�
 - **날짜 선택:** 달력의 날짜를 누르면 오른쪽 할 일 목록도 그 날짜로 이동합니다.
 - **TimeTree:** 상단의 **일정 추가**를 누르거나 기존 일정을 눌러 편집합니다. 실제 캘린더의 라벨 이름과 색상으로 선택할 수 있습니다. 삭제는 확인 후 실행됩니다.
 - **반복 일정:** 선택한 회차만 수정·삭제합니다. 반복 회차의 종일 여부 변경은 원본 TimeTree에서 하세요.
-- **Todo Mate 추가:** 카테고리의 **+**를 누르면 목록 아래에 입력칸이 생깁니다. Enter로 추가한 뒤 계속 입력할 수 있고, Shift+Enter는 줄바꿈, Esc는 취소입니다. 다른 곳을 클릭해도 저장됩니다.
+- **Todo Mate 추가:** 카테고리의 **+**를 누르면 목록 아래에 투명한 입력 줄과 얇은 밑줄만 생깁니다. 수정할 때도 같은 밑줄로 입력 중임을 표시합니다. Enter로 추가한 뒤 계속 입력할 수 있고, Shift+Enter는 줄바꿈, Esc는 취소입니다. 다른 곳을 클릭해도 저장됩니다.
 - **내용 수정:** 할 일을 더블클릭하거나 키보드로 선택한 뒤 F2를 누르면 기존 배경·글자·줄 위치 그대로 텍스트만 수정합니다. Enter로 저장하고 Esc로 취소합니다. 완료 상태와 기존 순서는 유지합니다.
 - **달력 월 이동:** 이전·다음 달을 둘러보아도 투두메이트의 날짜와 목록은 유지됩니다. 달력의 특정 날짜를 직접 누르면 해당 날짜의 할 일로 바뀝니다.
 - **미루기:** **··· → 내일로 미루기**를 누르면 다음 날로 이동합니다. 오늘이 아닌 날짜에는 **다음 날로 미루기**로 표시하며 알림도 하루 뒤로 옮깁니다. 날짜·카테고리·알림은 같은 메뉴의 별도 항목에서 설정합니다. 완료 처리는 목록의 체크박스로 합니다.
@@ -209,7 +209,7 @@ TimeTree 계정 연결도 앱의 설정에서 진행합니다. 개인 Codex 설�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\packaging\build_release.ps1
 ```
 
-빌드 도구는 공식 배포처에서 Python·Node 런타임과 Inno Setup을 받아 `build/`에 준비합니다. 생성되는 파일은 `dist/Daydesk-Setup-1.3.1-x64.exe`입니다. 빌드 전에 커밋된 기본 설정을 사용하며 빌드한 사람의 로그인 정보나 일정 캐시는 복사하지 않습니다.
+빌드 도구는 공식 배포처에서 Python·Node 런타임과 Inno Setup을 받아 `build/`에 준비합니다. 생성되는 파일은 `dist/Daydesk-Setup-1.3.2-x64.exe`입니다. 빌드 전에 커밋된 기본 설정을 사용하며 빌드한 사람의 로그인 정보나 일정 캐시는 복사하지 않습니다.
 
 <details>
 <summary>코드 구성과 테스트</summary>

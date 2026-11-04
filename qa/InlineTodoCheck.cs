@@ -76,6 +76,11 @@ static class InlineTodoCheck {
             Call(panel,"BeginInline",null,goals[1]); Pump();
             var input=(TextBox)Field(panel,"inlineInput"); Check(input!=null && input.IsKeyboardFocused,"Back-pinned inline input cannot receive keyboard focus");
             Check(window.OwnedWindows.Count==0 && input.ActualHeight<65,"Adding opened a popup or oversized editor");
+            window.UpdateLayout();
+            var adding=(Border)Field(panel,"inlineEditor");
+            Check(((SolidColorBrush)input.Background).Color.A==0 && input.BorderThickness==new Thickness(0) && adding.BorderThickness==new Thickness(0,0,0,1),"Adding is not transparent with only one bottom line");
+            Check(!Children<Button>(adding).Any() && adding.ActualHeight<30,"Adding still has a button panel or oversized row");
+            Image(panel,"inline-add-underline.png");
             input.Text="한글 인라인 입력 & $(예시)"; Goals(fake);
             fake.Calls.Enqueue((r,b)=> { Check(r.Method==HttpMethod.Post && r.RequestUri.AbsolutePath.EndsWith("/TodoItem"),"Add did not use Firebase TodoItem"); var fields=Fields(b); Check((string)((D)fields["content"])["stringValue"]==input.Text,"Inline content changed"); return new D { {"name","projects/mate-914f3/databases/(default)/documents/TodoItem/created-task"},{"fields",fields} }; });
             Await(Call(panel,"SaveInline",true)); Check(input.Text=="" && Field(panel,"inlineInput")==input,"Enter did not keep an empty row for the next task"); Check(fake.Calls.Count==0,"Add request sequence incomplete");
@@ -89,6 +94,7 @@ static class InlineTodoCheck {
             Image(panel,"inline-edit-before.png");
             Call(panel,"BeginInline",original,goals[0]); Pump(); window.UpdateLayout(); input=(TextBox)Field(panel,"inlineInput");
             Check(((SolidColorBrush)input.Background).Color.A==0 && input.BorderThickness==new Thickness(0) && input.Padding==new Thickness(0),"Editing added an opaque field or frame");
+            Check(((Border)Field(panel,"inlineEditor")).BorderThickness==new Thickness(0,0,0,1),"Editing is missing its subtle bottom line");
             Check(input.Foreground.ToString()==label.Foreground.ToString() && input.FontSize==label.FontSize,"Editing changed text appearance");
             Check((input.TranslatePoint(new Point(),panel)-position).Length<2 && Math.Abs(input.ActualHeight-height)<2,"Editing moved or resized the original text row");
             Check(Children<CheckBox>((DependencyObject)Field(panel,"list")).Count()==2,"Editing removed the original row checkbox");

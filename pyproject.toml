@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daydesk-local"
-version = "1.3.1"
+version = "1.3.2"
 description = "Local TimeTree and Todo Mate desktop controls"
 requires-python = ">=3.11"
 
