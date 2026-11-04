@@ -69,12 +69,12 @@ sealed class TodoPanel : UserControl, IDisposable {
         status.TextWrapping=TextWrapping.Wrap; status.Margin=new Thickness(0,8,0,0); Grid.SetRow(status,4); layout.Children.Add(status);
         timer.Tick+=delegate { if(syncMinutes>0 && DateTime.UtcNow>=nextSync) Refresh(); };
         if(connect) Loaded+=async delegate {
-            if(client!=null || disposed) return;
-            try { client=new MateClient(MateClient.Folder); TodoSnapshots.AccountKey=client.AccountKey; TryCached(); Render(); if(client.Connected) { await Reload(false); timer.Start(); } else { status.Text="계정 연결을 누르거나 daydesk todo login을 실행해 주세요."; } }
+            if(disposed) return;
+            try { CheckAccount(); TryCached(); Render(); if(client.Connected) { await Reload(false); timer.Start(); } else { status.Text="계정 연결을 누르거나 daydesk todo login을 실행해 주세요."; } }
             catch { status.Text="Todo Mate 계정 연결 정보를 읽지 못했습니다."; }
         };
         if(!connect) status.Text="디자인 검증용 샘플 할 일";
-        if(connect) { using(var account=new MateClient(MateClient.Folder)) TodoSnapshots.AccountKey=account.AccountKey; TryCached(); }
+        if(connect) { client=new MateClient(MateClient.Folder); TodoSnapshots.AccountKey=client.AccountKey; TryCached(); }
         Render();
     }
     void ReadPreferences() {
