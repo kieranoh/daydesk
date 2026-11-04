@@ -5,6 +5,15 @@ using System.Windows.Markup;
 using System.Windows.Media;
 
 static class WidgetTheme {
+    internal static void Palette(ResourceDictionary resources,bool light) {
+        if(resources.Contains("WidgetLight") && Equals(resources["WidgetLight"],light)) return;
+        resources["WidgetLight"]=light;
+        string[] keys={"WidgetInk","WidgetButton","WidgetLine","WidgetPanel","WidgetSunday","WidgetSaturday","WidgetOutside","WidgetAccent","WidgetCheckBorder","WidgetScroll","WidgetScrollHover","WidgetFocus","WidgetSplitter"};
+        string[] colors=light ? new[]{"#24342B","#E4ECE6","#CDDAD1","#FFFFFF","#A53143","#285C91","#5C7065","#16834F","#748B7B","#748B7B","#466B56","#16834F","#748B7B"} : new[]{"#F4F8FC","#18FFFFFF","#25FFFFFF","#100D2336","#FFB9C0","#B0D0FF","#B1BDC9","#2ECC87","#80E0EDF5","#70D5E3E8","#C0F4F8FC","#FFFFFF","#50FFFFFF"};
+        for(int i=0;i<keys.Length;i++) resources[keys[i]]=Theme.Brush(colors[i]);
+        resources["WidgetTextEffect"]=new System.Windows.Media.Effects.DropShadowEffect { Color=Colors.Black,BlurRadius=3,ShadowDepth=0,Opacity=light ? 0 : .65 };
+        resources["CalendarTextEffect"]=new System.Windows.Media.Effects.DropShadowEffect { Color=Colors.Black,BlurRadius=3,ShadowDepth=0,Opacity=light ? 0 : .9 };
+    }
     internal static void Dialog(Window window,string title,FrameworkElement fields,FrameworkElement footer,double height=540,bool todoMate=false) {
         window.Title=title; window.Width=380; window.SizeToContent=SizeToContent.Height; window.MaxHeight=System.Math.Min(height,System.Math.Max(360,SystemParameters.WorkArea.Height-40));
         window.WindowStyle=WindowStyle.None; window.ResizeMode=ResizeMode.NoResize; window.AllowsTransparency=true;
@@ -127,11 +136,11 @@ static class WidgetTheme {
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType='{x:Type CheckBox}'>
-  <Setter Property='Foreground' Value='#F4F8FC'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Padding' Value='3'/>
+  <Setter Property='Foreground' Value='{DynamicResource WidgetInk}'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Padding' Value='3'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type CheckBox}'>
    <Border Background='Transparent' Padding='{TemplateBinding Padding}'>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='22'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
-     <Border x:Name='Box' Width='20' Height='20' CornerRadius='6' Background='#14FFFFFF' BorderBrush='#80E0EDF5' BorderThickness='1.3' VerticalAlignment='Center'>
+     <Border x:Name='Box' Width='20' Height='20' CornerRadius='6' Background='#14FFFFFF' BorderBrush='{DynamicResource WidgetCheckBorder}' BorderThickness='1.3' VerticalAlignment='Center'>
       <Path x:Name='Mark' Data='M 4,10 L 8,14 L 16,5' Stroke='#102A3E' StrokeThickness='2.2' StrokeStartLineCap='Round' StrokeEndLineCap='Round' Visibility='Collapsed'/>
      </Border>
      <ContentPresenter Grid.Column='1' Margin='8,0,0,0' VerticalAlignment='Center' RecognizesAccessKey='True'/>
@@ -140,18 +149,18 @@ static class WidgetTheme {
    <ControlTemplate.Triggers>
     <Trigger Property='HasContent' Value='False'><Setter Property='Width' Value='28'/></Trigger>
     <Trigger Property='IsChecked' Value='True'><Setter TargetName='Box' Property='Background' Value='#2ECC87'/><Setter TargetName='Box' Property='BorderBrush' Value='#2ECC87'/><Setter TargetName='Mark' Property='Visibility' Value='Visible'/></Trigger>
-    <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Box' Property='BorderBrush' Value='#7BE3B6'/></Trigger>
-    <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='Box' Property='BorderBrush' Value='#FFFFFF'/><Setter TargetName='Box' Property='BorderThickness' Value='2'/></Trigger>
+    <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Box' Property='BorderBrush' Value='{DynamicResource WidgetAccent}'/></Trigger>
+    <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='Box' Property='BorderBrush' Value='{DynamicResource WidgetFocus}'/><Setter TargetName='Box' Property='BorderThickness' Value='2'/></Trigger>
     <Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.45'/></Trigger>
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style x:Key='ScrollThumb' TargetType='{x:Type Thumb}'>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='{x:Type Thumb}'>
-   <Border x:Name='Grip' Background='#70D5E3E8' CornerRadius='3' Margin='3'/>
+   <Border x:Name='Grip' Background='{DynamicResource WidgetScroll}' CornerRadius='3' Margin='3'/>
    <ControlTemplate.Triggers>
-    <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Grip' Property='Background' Value='#C0F4F8FC'/></Trigger>
-    <Trigger Property='IsDragging' Value='True'><Setter TargetName='Grip' Property='Background' Value='#2ECC87'/></Trigger>
+    <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Grip' Property='Background' Value='{DynamicResource WidgetScrollHover}'/></Trigger>
+    <Trigger Property='IsDragging' Value='True'><Setter TargetName='Grip' Property='Background' Value='{DynamicResource WidgetAccent}'/></Trigger>
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
@@ -201,5 +210,6 @@ static class WidgetTheme {
             if(todoMate) xaml=xaml.Replace("#2ECC87","#25272B").Replace("#17232E","#FFFFFF");
         }
         resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(xaml));
+        Palette(resources,light);
     }
 }

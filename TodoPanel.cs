@@ -326,9 +326,9 @@ sealed class TodoPanel : UserControl, IDisposable {
         if(busy || disposed || client==null || !client.Connected || !Current) return;
         if(inlineInput!=null) { InlineFocus(true); status.Text="작성 중인 내용을 저장하거나 취소해 주세요."; return; }
         inlineTodo=todo; inlineGoal=goal; inlineDate=selected; inlineUncertain=false; timer.Stop();
-        var text=Theme.Text("",13);
         inlineInput=new TextBox { Text=todo==null ? "" : todo.Content,FontSize=13,MinLines=1,MaxLines=3,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,
-            Padding=new Thickness(0),Foreground=text.Foreground,Background=Brushes.Transparent,CaretBrush=text.Foreground,BorderThickness=new Thickness(0),Effect=text.Effect,VerticalAlignment=VerticalAlignment.Center };
+            Padding=new Thickness(0),Background=Brushes.Transparent,BorderThickness=new Thickness(0),VerticalAlignment=VerticalAlignment.Center };
+        inlineInput.SetResourceReference(Control.ForegroundProperty,"WidgetInk"); inlineInput.SetResourceReference(TextBox.CaretBrushProperty,"WidgetInk"); inlineInput.SetResourceReference(UIElement.EffectProperty,"WidgetTextEffect");
         if(todo!=null && todo.Done) inlineInput.TextDecorations=TextDecorations.Strikethrough;
         var host=new FrameworkElementFactory(typeof(ScrollViewer),"PART_ContentHost");
         inlineInput.Template=new ControlTemplate(typeof(TextBox)) { VisualTree=host };

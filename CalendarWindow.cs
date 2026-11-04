@@ -31,6 +31,7 @@ public partial class CalendarWindow : Window {
     static readonly Color Green = (Color)ColorConverter.ConvertFromString("#2ECC87");
     static readonly Brush Line = Brush("#25FFFFFF");
     readonly Border plate = new Border();
+    readonly ResourceDictionary widgetResources;
     readonly Grid calendar = new Grid();
     readonly Grid mainArea=new Grid();
     readonly ColumnDefinition calendarColumn=new ColumnDefinition { Width=new GridLength(1,GridUnitType.Star),MinWidth=420 };
@@ -136,9 +137,10 @@ public partial class CalendarWindow : Window {
     static DateTime Start(D e) { return DateTimeOffset.Parse(S(e,"start"),CultureInfo.InvariantCulture).DateTime; }
     static DateTime End(D e) { return DateTimeOffset.Parse(S(e,"end"),CultureInfo.InvariantCulture).DateTime; }
     static SolidColorBrush Brush(string color) { var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)); b.Freeze(); return b; }
-    static TextBlock Text(string value, double size, bool bold) { return new TextBlock { Text=value, FontSize=size, Foreground=new SolidColorBrush(Ink), FontWeight=bold ? FontWeights.SemiBold : FontWeights.Normal, VerticalAlignment=VerticalAlignment.Center, TextTrimming=TextTrimming.CharacterEllipsis, Effect=new DropShadowEffect { Color=Colors.Black, BlurRadius=3, ShadowDepth=0, Opacity=.9 } }; }
+    static TextBlock Text(string value, double size, bool bold) { var text=new TextBlock { Text=value, FontSize=size, FontWeight=bold ? FontWeights.SemiBold : FontWeights.Normal, VerticalAlignment=VerticalAlignment.Center, TextTrimming=TextTrimming.CharacterEllipsis }; text.SetResourceReference(TextBlock.ForegroundProperty,"WidgetInk"); text.SetResourceReference(UIElement.EffectProperty,"CalendarTextEffect"); return text; }
     static Button Btn(string label, Action action) {
         var button = new Button { Content=label, Padding=new Thickness(11,7,11,7), Margin=new Thickness(2), Background=Brush("#18FFFFFF"), Foreground=new SolidColorBrush(Ink), BorderBrush=Brush("#00000000"), BorderThickness=new Thickness(1), Cursor=Cursors.Hand, FontSize=13, HorizontalContentAlignment=HorizontalAlignment.Center };
+        button.SetResourceReference(Control.ForegroundProperty,"WidgetInk"); button.SetResourceReference(Control.BackgroundProperty,"WidgetButton");
         var border = new FrameworkElementFactory(typeof(Border));
         border.SetValue(Border.CornerRadiusProperty,new CornerRadius(7));
         border.SetBinding(Border.BackgroundProperty,new System.Windows.Data.Binding("Background") { RelativeSource=System.Windows.Data.RelativeSource.TemplatedParent });
@@ -161,6 +163,7 @@ public partial class CalendarWindow : Window {
 
     internal static void StyleCalendarSelector(ComboBox calendars,bool light=false) {
         calendars.Foreground=new SolidColorBrush(light ? DarkInk : Ink); calendars.Background=Brush(light ? "#F7F8F9" : "#08FFFFFF"); calendars.BorderBrush=Brush(light ? "#DDE2E5" : "#30FFFFFF");
+        if(!light) { calendars.SetResourceReference(Control.ForegroundProperty,"WidgetInk"); calendars.SetResourceReference(Control.BorderBrushProperty,"WidgetLine"); }
         AutomationProperties.SetName(calendars,"캘린더 선택");
         string template=@"
 <ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='{x:Type ComboBox}'>
@@ -221,7 +224,7 @@ public partial class CalendarWindow : Window {
         Top=Math.Max(SystemParameters.VirtualScreenTop,Math.Min(SystemParameters.VirtualScreenTop+SystemParameters.VirtualScreenHeight-Height,N(prefs,"top",60)));
         try { Icon=BitmapFrame.Create(new Uri(System.IO.Path.Combine(Root,"calendar.ico"))); } catch { }
         var outer=new Grid { Margin=new Thickness(12) };
-        WidgetTheme.Apply(outer.Resources);
+        widgetResources=outer.Resources; WidgetTheme.Apply(widgetResources);
         Content=outer;
         plate.CornerRadius=new CornerRadius(9); plate.BorderThickness=new Thickness(1); plate.BorderBrush=Brush("#40C7E3F8");
         plate.Effect=new DropShadowEffect { BlurRadius=18, ShadowDepth=3, Opacity=.16, Color=Colors.Black };
@@ -267,10 +270,11 @@ public partial class CalendarWindow : Window {
         var sideArea=new Grid(); sideArea.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto,SharedSizeGroup="PaneHeading" }); sideArea.RowDefinitions.Add(new RowDefinition());
         Grid.SetColumn(sideArea,2); main.Children.Add(sideArea);
         var side=new Border { CornerRadius=new CornerRadius(8), Background=Brush("#100D2336"), BorderBrush=Brush("#20FFFFFF"), BorderThickness=new Thickness(1), Padding=new Thickness(12) };
+        side.SetResourceReference(Border.BackgroundProperty,"WidgetPanel"); side.SetResourceReference(Border.BorderBrushProperty,"WidgetLine");
         Grid.SetRow(side,1); sideArea.Children.Add(side);
         var divider=new GridSplitter { Width=12,HorizontalAlignment=HorizontalAlignment.Stretch,VerticalAlignment=VerticalAlignment.Stretch,ResizeDirection=GridResizeDirection.Columns,ResizeBehavior=GridResizeBehavior.PreviousAndNext,Background=Brushes.Transparent,Cursor=Cursors.SizeWE,KeyboardIncrement=12,DragIncrement=1,ToolTip="드래그하거나 방향키로 Todo Mate 폭 조절" };
         AutomationProperties.SetName(divider,"Todo Mate 폭 조절");
-        var handle=new FrameworkElementFactory(typeof(Border),"Handle"); handle.SetValue(Border.BackgroundProperty,Brush("#50FFFFFF")); handle.SetValue(Border.WidthProperty,3.0); handle.SetValue(Border.HeightProperty,38.0); handle.SetValue(Border.CornerRadiusProperty,new CornerRadius(2)); handle.SetValue(Border.HorizontalAlignmentProperty,HorizontalAlignment.Center); handle.SetValue(Border.VerticalAlignmentProperty,VerticalAlignment.Center);
+        var handle=new FrameworkElementFactory(typeof(Border),"Handle"); handle.SetResourceReference(Border.BackgroundProperty,"WidgetSplitter"); handle.SetValue(Border.WidthProperty,3.0); handle.SetValue(Border.HeightProperty,38.0); handle.SetValue(Border.CornerRadiusProperty,new CornerRadius(2)); handle.SetValue(Border.HorizontalAlignmentProperty,HorizontalAlignment.Center); handle.SetValue(Border.VerticalAlignmentProperty,VerticalAlignment.Center);
         var dividerFrame=new FrameworkElementFactory(typeof(Border)); dividerFrame.SetValue(Border.BackgroundProperty,Brushes.Transparent); dividerFrame.AppendChild(handle);
         var dividerTemplate=new ControlTemplate(typeof(GridSplitter)) { VisualTree=dividerFrame };
         foreach(var property in new[]{UIElement.IsMouseOverProperty,UIElement.IsKeyboardFocusedProperty}) { var highlight=new Trigger { Property=property,Value=true }; highlight.Setters.Add(new Setter(Border.BackgroundProperty,new SolidColorBrush(Green),"Handle")); dividerTemplate.Triggers.Add(highlight); }
@@ -369,8 +373,10 @@ public partial class CalendarWindow : Window {
         backgroundTransparency=Math.Max(0,Math.Min(95,value));
         if(backgroundTransparency>0) lastTransparency=backgroundTransparency;
         if(transparencySwitch!=null) transparencySwitch.IsChecked=backgroundTransparency>0;
-        // Only this brush changes alpha; the window and every foreground element stay opaque.
-        plate.Background=new SolidColorBrush(Color.FromArgb(awaitingInitialConnections ? (byte)255 : (byte)Math.Round(255*(1-backgroundTransparency/100)),16,42,62));
+        bool light=backgroundTransparency==0 || awaitingInitialConnections;
+        WidgetTheme.Palette(widgetResources,light);
+        brand.Foreground=Brush(light ? "#137A49" : "#2ECC87"); plate.BorderBrush=Brush(light ? "#CDDAD1" : "#40C7E3F8");
+        plate.Background=light ? Brush("#F1F5F2") : new SolidColorBrush(Color.FromArgb((byte)Math.Round(255*(1-backgroundTransparency/100)),16,42,62));
     }
     void ScheduleSave() { if(!IsLoaded || closing) return; saveDelay.Stop(); saveDelay.Start(); }
     void SetSyncMinutes(int minutes) { syncMinutes=minutes; nextSync=DateTime.UtcNow.AddMinutes(Math.Max(1,minutes)); todoPanel.SetSyncMinutes(minutes); ScheduleSave(); }
@@ -540,8 +546,8 @@ public partial class CalendarWindow : Window {
         string label=day.Day.ToString();
         var button=Btn(label,delegate { Select(day); }); button.FontSize=12; button.FontWeight=FontWeights.SemiBold; button.Padding=new Thickness(0); button.Height=28; button.MinWidth=28; button.Margin=new Thickness(3,4,3,2);
         button.Background=day==Today() ? new SolidColorBrush(Green) : day==selected ? Brush("#402ECC87") : Brush("#00000000");
-        if(day==Today()) button.Foreground=new SolidColorBrush(DarkInk); else if(day.Month!=anchor.Month) button.Foreground=Brush("#B1BDC9"); else if(column==0) button.Foreground=Brush("#FFB9C0"); else if(column==6) button.Foreground=Brush("#B0D0FF");
-        var text=Text(label,12,true); text.Foreground=button.Foreground; button.Content=text; dateButtons[day]=button;
+        if(day==Today()) button.Foreground=new SolidColorBrush(DarkInk); else if(day.Month!=anchor.Month) button.SetResourceReference(Control.ForegroundProperty,"WidgetOutside"); else if(column==0) button.SetResourceReference(Control.ForegroundProperty,"WidgetSunday"); else if(column==6) button.SetResourceReference(Control.ForegroundProperty,"WidgetSaturday");
+        var text=Text(label,12,true); text.SetBinding(TextBlock.ForegroundProperty,new System.Windows.Data.Binding("Foreground") { Source=button }); button.Content=text; dateButtons[day]=button;
         return button;
     }
     Button EventButton(D e, string prefix) {
@@ -554,7 +560,7 @@ public partial class CalendarWindow : Window {
         var days=A(model,"days").Select(x=>DateTime.Parse((string)x,CultureInfo.InvariantCulture)).ToArray();
         calendar.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto,SharedSizeGroup="PaneHeading" });
         var header=new UniformGrid { Columns=7 };
-        for(int c=0;c<7;c++) { var t=Text("일월화수목금토"[c].ToString(),12,false); t.HorizontalAlignment=HorizontalAlignment.Center; t.Margin=new Thickness(0,0,0,10); if(c==0)t.Foreground=Brush("#FFB9C0"); if(c==6)t.Foreground=Brush("#B0D0FF"); header.Children.Add(t); }
+        for(int c=0;c<7;c++) { var t=Text("일월화수목금토"[c].ToString(),12,false); t.HorizontalAlignment=HorizontalAlignment.Center; t.Margin=new Thickness(0,0,0,10); if(c==0)t.SetResourceReference(TextBlock.ForegroundProperty,"WidgetSunday"); if(c==6)t.SetResourceReference(TextBlock.ForegroundProperty,"WidgetSaturday"); header.Children.Add(t); }
         calendar.Children.Add(header);
         var weeks=A(model,"weeks");
         calendar.RowDefinitions.Add(new RowDefinition { Height=new GridLength(1,GridUnitType.Star) });
@@ -584,6 +590,7 @@ public partial class CalendarWindow : Window {
             for(int c=0;c<7;c++) {
                 DateTime day=days[w*7+c];
                 var cell=new Border { BorderBrush=Line, BorderThickness=new Thickness(0,1,c==6 ? 0 : 1,0), Background=Brush(c==6 ? "#133E345C" : "#060A2338") };
+                cell.SetResourceReference(Border.BorderBrushProperty,"WidgetLine");
                 var date=DateButton(day,c); date.HorizontalAlignment=HorizontalAlignment.Left; date.VerticalAlignment=VerticalAlignment.Top; cell.Child=date;
                 cell.MouseLeftButtonUp += delegate { Select(day); }; cells.Children.Add(cell);
             }
@@ -703,6 +710,11 @@ public partial class CalendarWindow : Window {
         return Render(content);
     }
     static void Check(bool condition,string message) { if(!condition) throw new Exception(message); }
+    static double Contrast(Color a,Color b) {
+        Func<byte,double> tone=v=> { double x=v/255.0; return x<=.04045 ? x/12.92 : Math.Pow((x+.055)/1.055,2.4); };
+        Func<Color,double> luminance=c=>.2126*tone(c.R)+.7152*tone(c.G)+.0722*tone(c.B);
+        double x1=luminance(a),x2=luminance(b); return (Math.Max(x1,x2)+.05)/(Math.Min(x1,x2)+.05);
+    }
     static IEnumerable<T> Descendants<T>(DependencyObject parent) where T:DependencyObject {
         for(int i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++) {
             var child=VisualTreeHelper.GetChild(parent,i); if(child is T) yield return (T)child;
@@ -808,6 +820,11 @@ public partial class CalendarWindow : Window {
         window.SetTransparency(65);
         window.transparencySwitch.IsChecked=false; window.transparencySwitch.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         Check(window.backgroundTransparency==0 && window.lastTransparency==65 && ((SolidColorBrush)window.plate.Background).Color.A==255,"Transparency toggle did not make the background opaque or lost its previous value");
+        image=Render(content); WritePng(image,System.IO.Path.ChangeExtension(report,null)+"-opaque.png");
+        var opaqueBackground=((SolidColorBrush)window.plate.Background).Color;
+        Check(Contrast(((SolidColorBrush)window.period.Foreground).Color,opaqueBackground)>=4.5 && Contrast(Colors.Black,opaqueBackground)>=4.5 && Contrast(((SolidColorBrush)window.brand.Foreground).Color,opaqueBackground)>=4.5,"Opaque headings have insufficient contrast");
+        Check(Descendants<TextBlock>(window.todoPanel).Where(t=>!string.IsNullOrWhiteSpace(t.Text)).All(t=>Contrast(((SolidColorBrush)t.Foreground).Color,Colors.White)>=4.5),"Opaque Todo text is not readable");
+        Check(((DropShadowEffect)window.period.Effect).Opacity==0,"Opaque text retained the dark shadow");
         window.Save(); var opaqueWindow=new CalendarWindow("",false);
         Check(opaqueWindow.transparencySwitch.IsChecked==false && opaqueWindow.lastTransparency==65,"Opaque mode or remembered transparency was not restored");
         opaqueWindow.transparencySwitch.IsChecked=true; opaqueWindow.transparencySwitch.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));

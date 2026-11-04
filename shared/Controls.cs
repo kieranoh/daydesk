@@ -16,9 +16,10 @@ static class Theme
 
     public static TextBlock Text(string value, double size = 13, bool bold = false)
     {
-        return new TextBlock { Text = value, FontSize = size, Foreground = Ink, FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
+        var text = new TextBlock { Text = value, FontSize = size, Foreground = Ink, FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
             TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
             Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 3, ShadowDepth = 0, Opacity = .65 } };
+        text.SetResourceReference(TextBlock.ForegroundProperty,"WidgetInk"); text.SetResourceReference(UIElement.EffectProperty,"WidgetTextEffect"); return text;
     }
 
     public static void StyleButton(ButtonBase button, string name)
@@ -26,6 +27,7 @@ static class Theme
         button.Padding = new Thickness(10, 6, 10, 6); button.Margin = new Thickness(2);
         button.Background = Brush("#18FFFFFF"); button.Foreground = Ink; button.BorderBrush = Brushes.Transparent;
         button.BorderThickness = new Thickness(1); button.Cursor = Cursors.Hand; button.FontSize = 13;
+        button.SetResourceReference(Control.ForegroundProperty,"WidgetInk"); button.SetResourceReference(Control.BackgroundProperty,"WidgetButton");
         var border = new FrameworkElementFactory(typeof(Border));
         border.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
         foreach (var property in new[] { Border.BackgroundProperty, Border.BorderBrushProperty, Border.BorderThicknessProperty, Border.PaddingProperty })
