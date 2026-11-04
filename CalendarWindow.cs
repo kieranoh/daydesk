@@ -216,7 +216,7 @@ public partial class CalendarWindow : Window {
         var controls=new StackPanel { Orientation=Orientation.Horizontal };
         DockPanel.SetDock(controls,Dock.Right); header.Children.Add(controls);
         todoSwitch=TodoPanel.CategorySwitch("투두",todoVisible,on=> { if(!SetTodoVisible(on)) { todoSwitch.IsChecked=todoVisible; status.Text="작성 중인 할 일을 저장하거나 취소한 뒤 숨겨 주세요."; } },Theme.Green);
-        todoSwitch.ToolTip="Todo Mate 사이드 패널 표시·숨기기"; AutomationProperties.SetName(todoSwitch,"Todo Mate 사이드 패널 표시"); todoSwitch.Margin=new Thickness(0,0,8,0); controls.Children.Add(todoSwitch);
+        todoSwitch.ToolTip="Todo Mate 사이드 패널 표시·숨기기"; AutomationProperties.SetName(todoSwitch,"Todo Mate 사이드 패널 표시"); todoSwitch.Margin=new Thickness(0);
         backSwitch=TodoPanel.CategorySwitch("뒤로 고정",pinBack,on=>SetWindowLayer(on ? false : Topmost,on),Theme.Green); backSwitch.ToolTip="다른 프로그램 뒤로 고정"; backSwitch.Margin=new Thickness(0,0,8,0); controls.Children.Add(backSwitch);
         controls.Children.Add(Btn("일정 추가",delegate { EditTree(); })); controls.Children.Add(Btn("새로고침",delegate { Refresh(true); todoPanel.Refresh(); })); controls.Children.Add(Btn("설정",delegate { ShowSettings(); }));
         var exit=Btn("×",Close); exit.ToolTip="위젯 종료"; AutomationProperties.SetName(exit,"위젯 종료"); controls.Children.Add(exit);
@@ -256,7 +256,8 @@ public partial class CalendarWindow : Window {
         todoPanel.ConnectRequested=delegate { ShowSettings(true); };
         todoPanel.SetSyncMinutes(syncMinutes);
         var categoryControls=new ScrollViewer { Content=todoPanel.CategoryControls,MaxHeight=94,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Margin=new Thickness(12,0,0,0),VerticalAlignment=VerticalAlignment.Center };
-        Grid.SetColumn(categoryControls,2); nav.Children.Add(categoryControls);
+        var todoOptions=new StackPanel { Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Center };
+        todoOptions.Children.Add(todoSwitch); todoOptions.Children.Add(categoryControls); Grid.SetColumn(todoOptions,2); nav.Children.Add(todoOptions);
         todoSide=side; todoDivider=divider; todoCategories=categoryControls; SetTodoVisible(todoVisible);
         var footer=new DockPanel { Margin=new Thickness(0,10,0,0) }; Grid.SetRow(footer,3); layout.Children.Add(footer);
         var resize=new Thumb { Width=18, Height=18, Cursor=Cursors.SizeNWSE, Background=Brush("#01FFFFFF") };
@@ -869,6 +870,8 @@ public partial class CalendarWindow : Window {
         Check(window.Save(),"Pane width could not be saved");
         var reopened=new CalendarWindow("",false); Check(reopened.todoColumn.Width.Value==400,"Pane width was not restored on restart"); reopened.todoPanel.Dispose();
         window.SetTodoVisible(false); Render(content);
+        Check(VisualTreeHelper.GetParent(window.todoSwitch)==VisualTreeHelper.GetParent(window.todoCategories) && window.todoSwitch.Visibility==Visibility.Visible,"Todo switch is not beside the category controls or disappeared with the panel");
+        WritePng(Render(content),System.IO.Path.ChangeExtension(report,null)+"-timetree-only.png");
         Check(!window.todoVisible && window.todoColumn.ActualWidth==0 && window.mainArea.ColumnDefinitions[1].ActualWidth==0 && window.todoSide.Visibility==Visibility.Collapsed && window.todoCategories.Visibility==Visibility.Collapsed,"Hiding Todo Mate left panel space or category controls");
         Check(Math.Abs(window.calendar.ActualWidth-window.mainArea.ActualWidth)<1 && window.todoWidth==400,"Calendar did not fill the hidden panel or lost the preferred width");
         window.Save(); var hiddenPane=new CalendarWindow("",false);
