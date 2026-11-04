@@ -8,6 +8,7 @@
   "pin_back": false,
   "sync_minutes": 30,
   "todo_width": 300,
+  "todo_visible": true,
   "todo": {
     "ShowAllCategories": false,
     "HiddenGoals": []

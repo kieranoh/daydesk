@@ -81,6 +81,7 @@ def parser():
     settings.add_argument("--pin-back", choices=("on", "off"), help="다른 프로그램 뒤로 고정")
     settings.add_argument("--sync-minutes", type=int, choices=(0,15,30,60), help="두 서비스 자동 동기화 간격; 0은 수동 새로고침만")
     settings.add_argument("--todo-width", type=todo_width, metavar="260~600", help="Todo Mate 영역의 가로 폭(px)")
+    settings.add_argument("--todo-visible", choices=("on", "off"), help="Todo Mate 사이드 패널 표시·숨기기")
     settings.add_argument("--recommended", action="store_true", help="저장된 추천 설정으로 즉시 복원")
     auto = sub.add_parser("autostart", help="Windows 로그인 시 자동 실행")
     auto.add_argument("mode", choices=("on", "off", "status"))
@@ -358,21 +359,21 @@ def run(args):
         return todo_command(args)
     if args.command == "settings" and args.pin=='on' and args.pin_back=='on':
         raise ValueError("항상 위와 가장 뒤 고정은 동시에 켤 수 없습니다.")
-    if args.command == "settings" and args.recommended and any(getattr(args,k) is not None for k in ("transparency","pin","pin_back","sync_minutes","todo_width")):
+    if args.command == "settings" and args.recommended and any(getattr(args,k) is not None for k in ("transparency","pin","pin_back","sync_minutes","todo_width","todo_visible")):
         raise ValueError("추천 설정은 다른 설정 옵션과 함께 적용할 수 없습니다.")
-    if args.command == "status" or (args.command == "settings" and not args.recommended and all(getattr(args, k) is None for k in ("transparency", "pin", "pin_back","sync_minutes","todo_width"))):
+    if args.command == "status" or (args.command == "settings" and not args.recommended and all(getattr(args, k) is None for k in ("transparency", "pin", "pin_back","sync_minutes","todo_width","todo_visible"))):
         try:
             state = rpc({"op": "status"})
         except FileNotFoundError:
             prefs = saved()
             state = {"running": False, "view": "month",
-                     "transparency": prefs.get("background_transparency", 65), "pin": prefs.get("pin", False),"pin_back":prefs.get("pin_back",False),"sync_minutes":prefs.get("sync_minutes",30),"todo_width":prefs.get("todo_width",300)}
+                     "transparency": prefs.get("background_transparency", 65), "pin": prefs.get("pin", False),"pin_back":prefs.get("pin_back",False),"sync_minutes":prefs.get("sync_minutes",30),"todo_width":prefs.get("todo_width",300),"todo_visible":prefs.get("todo_visible",True)}
         return state | startup("status")
     request = {"op": args.command}
-    for key in ("date", "transparency", "pin", "pin_back", "sync_minutes","todo_width"):
+    for key in ("date", "transparency", "pin", "pin_back", "sync_minutes","todo_width","todo_visible"):
         value = getattr(args, key, None)
         if value is not None:
-            request[key] = (value == "on") if key in ("pin","pin_back") else value
+            request[key] = (value == "on") if key in ("pin","pin_back","todo_visible") else value
     if getattr(args,"recommended",False):
         request["recommended"]=True
     result = control(request, launch=args.command in ("open", "settings"))
@@ -398,6 +399,8 @@ def display(value):
             rows.append("동기화: " + (f"{value['sync_minutes']}분마다" if value["sync_minutes"] else "수동 새로고침만"))
         if "todo_width" in value:
             rows.append(f"Todo Mate 폭: {value['todo_width']:g}px")
+        if "todo_visible" in value:
+            rows.append("Todo Mate 표시: " + ("켜짐" if value["todo_visible"] else "꺼짐"))
         return "\n".join(rows)
     if isinstance(value, dict) and "autostart" in value:
         return "자동 실행: " + ("켜짐" if value["autostart"] else "꺼짐")

@@ -36,6 +36,9 @@ public partial class CalendarWindow : Window {
     readonly ColumnDefinition calendarColumn=new ColumnDefinition { Width=new GridLength(1,GridUnitType.Star),MinWidth=420 };
     readonly ColumnDefinition todoColumn=new ColumnDefinition { Width=new GridLength(300),MinWidth=260,MaxWidth=600 };
     readonly TodoPanel todoPanel;
+    FrameworkElement todoSide,todoDivider,todoCategories;
+    ToggleButton todoSwitch;
+    bool todoVisible=true;
     readonly TextBlock period = Text("", 25, true), status = Text("연결 중…", 11, false);
     readonly ComboBox calendars = new ComboBox();
     readonly DispatcherTimer autosync = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
@@ -190,6 +193,7 @@ public partial class CalendarWindow : Window {
         nextSync=DateTime.UtcNow.AddMinutes(Math.Max(1,syncMinutes));
         backgroundTransparency=Math.Max(0,Math.Min(95,N(prefs,"background_transparency",65)));
         todoWidth=Math.Max(260,Math.Min(600,N(prefs,"todo_width",300))); todoColumn.Width=new GridLength(todoWidth);
+        todoVisible=!prefs.ContainsKey("todo_visible") || B(prefs,"todo_visible");
         Width=Math.Max(MinWidth,Math.Min(SystemParameters.VirtualScreenWidth,N(prefs,"width",960)));
         Height=Math.Max(MinHeight,Math.Min(SystemParameters.VirtualScreenHeight,N(prefs,"height",700)));
         Left=Math.Max(SystemParameters.VirtualScreenLeft,Math.Min(SystemParameters.VirtualScreenLeft+SystemParameters.VirtualScreenWidth-Width,N(prefs,"left",Math.Max(20,SystemParameters.WorkArea.Right-Width-24))));
@@ -211,6 +215,8 @@ public partial class CalendarWindow : Window {
         Grid.SetRow(header,0); layout.Children.Add(header);
         var controls=new StackPanel { Orientation=Orientation.Horizontal };
         DockPanel.SetDock(controls,Dock.Right); header.Children.Add(controls);
+        todoSwitch=TodoPanel.CategorySwitch("투두",todoVisible,on=> { if(!SetTodoVisible(on)) { todoSwitch.IsChecked=todoVisible; status.Text="작성 중인 할 일을 저장하거나 취소한 뒤 숨겨 주세요."; } },Theme.Green);
+        todoSwitch.ToolTip="Todo Mate 사이드 패널 표시·숨기기"; AutomationProperties.SetName(todoSwitch,"Todo Mate 사이드 패널 표시"); todoSwitch.Margin=new Thickness(0,0,8,0); controls.Children.Add(todoSwitch);
         backSwitch=TodoPanel.CategorySwitch("뒤로 고정",pinBack,on=>SetWindowLayer(on ? false : Topmost,on),Theme.Green); backSwitch.ToolTip="다른 프로그램 뒤로 고정"; backSwitch.Margin=new Thickness(0,0,8,0); controls.Children.Add(backSwitch);
         controls.Children.Add(Btn("일정 추가",delegate { EditTree(); })); controls.Children.Add(Btn("새로고침",delegate { Refresh(true); todoPanel.Refresh(); })); controls.Children.Add(Btn("설정",delegate { ShowSettings(); }));
         var exit=Btn("×",Close); exit.ToolTip="위젯 종료"; AutomationProperties.SetName(exit,"위젯 종료"); controls.Children.Add(exit);
@@ -245,12 +251,13 @@ public partial class CalendarWindow : Window {
         divider.Template=dividerTemplate; Grid.SetColumn(divider,1); main.Children.Add(divider);
         divider.DragCompleted+=delegate { SetTodoWidth(todoColumn.ActualWidth); ScheduleSave(); };
         divider.KeyUp+=delegate { SetTodoWidth(todoColumn.ActualWidth); ScheduleSave(); };
-        main.SizeChanged+=delegate { todoColumn.Width=new GridLength(Math.Min(todoWidth,MaxTodoWidth)); };
+        main.SizeChanged+=delegate { if(todoVisible) todoColumn.Width=new GridLength(Math.Min(todoWidth,MaxTodoWidth)); };
         todoPanel=new TodoPanel(selected,SelectFromTodo,connect); side.Child=todoPanel;
         todoPanel.ConnectRequested=delegate { ShowSettings(true); };
         todoPanel.SetSyncMinutes(syncMinutes);
         var categoryControls=new ScrollViewer { Content=todoPanel.CategoryControls,MaxHeight=94,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Margin=new Thickness(12,0,0,0),VerticalAlignment=VerticalAlignment.Center };
         Grid.SetColumn(categoryControls,2); nav.Children.Add(categoryControls);
+        todoSide=side; todoDivider=divider; todoCategories=categoryControls; SetTodoVisible(todoVisible);
         var footer=new DockPanel { Margin=new Thickness(0,10,0,0) }; Grid.SetRow(footer,3); layout.Children.Add(footer);
         var resize=new Thumb { Width=18, Height=18, Cursor=Cursors.SizeNWSE, Background=Brush("#01FFFFFF") };
         var grip=new FrameworkElementFactory(typeof(TextBlock)); grip.SetValue(TextBlock.TextProperty,"⋰"); grip.SetValue(TextBlock.ForegroundProperty,Brush("#AAFFFFFF")); resize.Template=new ControlTemplate(typeof(Thumb)) { VisualTree=grip };
@@ -283,7 +290,7 @@ public partial class CalendarWindow : Window {
     D State() {
         return new D { {"running",true},{"pid",Process.GetCurrentProcess().Id},{"date",selected.ToString("yyyy-MM-dd")},
             {"view",view},{"transparency",backgroundTransparency},{"pin",Topmost},{"pin_back",pinBack},{"calendar_id",calendarId},
-            {"loading",loading},{"message",status.Text},{"sync_minutes",syncMinutes},{"todo_width",todoWidth} };
+            {"loading",loading},{"message",status.Text},{"sync_minutes",syncMinutes},{"todo_width",todoWidth},{"todo_visible",todoVisible} };
     }
     D HandleCommand(D request) {
         if(request==null) throw new ArgumentException("명령이 비어 있습니다.");
@@ -301,7 +308,9 @@ public partial class CalendarWindow : Window {
         if(request.ContainsKey("sync_minutes") && (!new[]{0,15,30,60}.Contains(interval) || N(request,"sync_minutes")!=interval)) throw new ArgumentException("동기화 간격은 0, 15, 30, 60분 중 하나입니다.");
         double pane=N(request,"todo_width",-1);
         if(request.ContainsKey("todo_width") && (pane<260 || pane>600)) throw new ArgumentException("Todo Mate 폭은 260~600px입니다.");
-        if(request.ContainsKey("recommended") && (!(request["recommended"] is bool) || (B(request,"recommended") && new[]{"transparency","pin","pin_back","sync_minutes","todo_width"}.Any(request.ContainsKey)))) throw new ArgumentException("추천 설정은 다른 설정 옵션과 함께 적용할 수 없습니다.");
+        if(request.ContainsKey("todo_visible") && !(request["todo_visible"] is bool)) throw new ArgumentException("todo_visible은 true 또는 false입니다.");
+        if(request.ContainsKey("todo_visible") && !B(request,"todo_visible") && todoPanel.HasPendingWrite) throw new InvalidOperationException("작성 중인 할 일을 저장하거나 취소한 뒤 숨겨 주세요.");
+        if(request.ContainsKey("recommended") && (!(request["recommended"] is bool) || (B(request,"recommended") && new[]{"transparency","pin","pin_back","sync_minutes","todo_width","todo_visible"}.Any(request.ContainsKey)))) throw new ArgumentException("추천 설정은 다른 설정 옵션과 함께 적용할 수 없습니다.");
         if(op=="close") { if(!CanClose()) throw new InvalidOperationException("할 일을 저장 중입니다. 저장을 마친 뒤 종료해 주세요."); return State(); }
         if(op=="open" || op=="settings") {
             bool redraw=request.ContainsKey("date") || request.ContainsKey("view");
@@ -316,6 +325,7 @@ public partial class CalendarWindow : Window {
             }
             if(request.ContainsKey("sync_minutes")) SetSyncMinutes(interval);
             if(request.ContainsKey("todo_width")) SetTodoWidth(pane);
+            if(request.ContainsKey("todo_visible")) SetTodoVisible(B(request,"todo_visible"));
             if(B(request,"recommended")) ApplyRecommended();
             if(settings!=null) settings.Close();
             if(!Save()) throw new IOException("설정은 적용되었지만 저장하지 못했습니다.");
@@ -339,7 +349,16 @@ public partial class CalendarWindow : Window {
     void ScheduleSave() { if(!IsLoaded || closing) return; saveDelay.Stop(); saveDelay.Start(); }
     void SetSyncMinutes(int minutes) { syncMinutes=minutes; nextSync=DateTime.UtcNow.AddMinutes(Math.Max(1,minutes)); todoPanel.SetSyncMinutes(minutes); ScheduleSave(); }
     double MaxTodoWidth { get { return mainArea.ActualWidth>0 ? Math.Max(260,Math.Min(600,mainArea.ActualWidth-432)) : 600; } }
-    void SetTodoWidth(double width) { todoWidth=Math.Max(260,Math.Min(MaxTodoWidth,width)); calendarColumn.Width=new GridLength(1,GridUnitType.Star); todoColumn.Width=new GridLength(todoWidth); ScheduleSave(); }
+    void SetTodoWidth(double width) { todoWidth=Math.Max(260,Math.Min(MaxTodoWidth,width)); calendarColumn.Width=new GridLength(1,GridUnitType.Star); if(todoVisible) todoColumn.Width=new GridLength(todoWidth); ScheduleSave(); }
+    bool SetTodoVisible(bool visible) {
+        if(!visible && todoPanel.HasPendingWrite) return false;
+        if(!visible) todoPanel.CloseInline();
+        todoVisible=visible; todoSwitch.IsChecked=visible;
+        todoSide.Visibility=todoDivider.Visibility=todoCategories.Visibility=visible ? Visibility.Visible : Visibility.Collapsed;
+        todoColumn.MinWidth=visible ? 260 : 0; todoColumn.Width=new GridLength(visible ? Math.Min(todoWidth,MaxTodoWidth) : 0);
+        mainArea.ColumnDefinitions[1].Width=new GridLength(visible ? 12 : 0);
+        ScheduleSave(); return true;
+    }
     void ResizeEdges(int horizontal,int vertical,double dx,double dy) {
         if(horizontal!=0) {
             double next=Math.Max(MinWidth,Math.Min(Math.Max(MinWidth,SystemParameters.VirtualScreenWidth),Width+(horizontal<0 ? -dx : dx)));
@@ -372,7 +391,7 @@ public partial class CalendarWindow : Window {
         if(File.Exists(RecommendedFile)) return;
         try {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(RecommendedFile)); string temp=RecommendedFile+".tmp";
-            try { File.WriteAllText(temp,Json.Serialize(new { background_transparency=backgroundTransparency,pin=Topmost,pin_back=pinBack,sync_minutes=syncMinutes,todo_width=todoWidth,todo=todoPanel.PreferenceValues(),autostart=B(AppPaths.Defaults(),"autostart") }),new UTF8Encoding(false)); File.Move(temp,RecommendedFile); }
+            try { File.WriteAllText(temp,Json.Serialize(new { background_transparency=backgroundTransparency,pin=Topmost,pin_back=pinBack,sync_minutes=syncMinutes,todo_width=todoWidth,todo_visible=todoVisible,todo=todoPanel.PreferenceValues(),autostart=B(AppPaths.Defaults(),"autostart") }),new UTF8Encoding(false)); File.Move(temp,RecommendedFile); }
             finally { if(File.Exists(temp)) File.Delete(temp); }
         }
         catch { status.Text="현재 구성을 추천 설정으로 저장하지 못했습니다."; }
@@ -383,6 +402,7 @@ public partial class CalendarWindow : Window {
         if(alpha<0 || alpha>95 || width<260 || width>600 || !new[]{0.0,15.0,30.0,60.0}.Contains(minutes) || !value.TryGetValue("pin",out pin) || !(pin is bool) || !value.TryGetValue("todo",out todo) || !(todo is D)) throw new ArgumentException("추천 설정을 읽지 못했습니다.");
         todoPanel.RestorePreferences((D)todo);
         SetTransparency(alpha); SetWindowLayer((bool)pin,B(value,"pin_back") && !(bool)pin); SetSyncMinutes((int)minutes); SetTodoWidth(width);
+        SetTodoVisible(!value.ContainsKey("todo_visible") || B(value,"todo_visible"));
         if(live && value.ContainsKey("autostart")) StartupState(B(value,"autostart") ? "on" : "off");
         if(!Save()) throw new IOException("추천 설정은 적용되었지만 저장하지 못했습니다.");
     }
@@ -390,7 +410,7 @@ public partial class CalendarWindow : Window {
         try {
             prefs["view"]=view; prefs["calendar_id"]=calendarId; prefs["pin"]=Topmost; prefs["pin_back"]=pinBack;
             prefs["sync_minutes"]=syncMinutes;
-            prefs["todo_width"]=todoWidth;
+            prefs["todo_width"]=todoWidth; prefs["todo_visible"]=todoVisible;
             prefs["background_transparency"]=backgroundTransparency; prefs.Remove("transparency");
             prefs["width"]=Width; prefs["height"]=Height; prefs["left"]=Left; prefs["top"]=Top;
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SettingsFile));
@@ -848,6 +868,13 @@ public partial class CalendarWindow : Window {
         Check(Math.Abs(window.todoColumn.ActualWidth-400)<2 && window.calendarColumn.ActualWidth>=420,"Resizing Todo Mate did not preserve calendar space");
         Check(window.Save(),"Pane width could not be saved");
         var reopened=new CalendarWindow("",false); Check(reopened.todoColumn.Width.Value==400,"Pane width was not restored on restart"); reopened.todoPanel.Dispose();
+        window.SetTodoVisible(false); Render(content);
+        Check(!window.todoVisible && window.todoColumn.ActualWidth==0 && window.mainArea.ColumnDefinitions[1].ActualWidth==0 && window.todoSide.Visibility==Visibility.Collapsed && window.todoCategories.Visibility==Visibility.Collapsed,"Hiding Todo Mate left panel space or category controls");
+        Check(Math.Abs(window.calendar.ActualWidth-window.mainArea.ActualWidth)<1 && window.todoWidth==400,"Calendar did not fill the hidden panel or lost the preferred width");
+        window.Save(); var hiddenPane=new CalendarWindow("",false);
+        Check(!hiddenPane.todoVisible && hiddenPane.todoWidth==400 && hiddenPane.todoColumn.Width.Value==0,"Hidden panel state or width was not restored"); hiddenPane.todoPanel.Dispose();
+        window.SetTodoVisible(true); Render(content);
+        Check(window.todoVisible && window.todoColumn.ActualWidth==400 && window.todoSide.Visibility==Visibility.Visible && window.todoSwitch.IsChecked==true,"Showing Todo Mate did not restore its width or switch");
         window.SetTransparency(25); window.Topmost=true; window.todoPanel.SetCategory("life",false); window.todoPanel.SetAllCategories(true);
         window.ApplyRecommended(); Render(content);
         Check(window.backgroundTransparency==65 && !window.Topmost && window.syncMinutes==30 && window.todoWidth==300,"Recommended visual settings were not restored");

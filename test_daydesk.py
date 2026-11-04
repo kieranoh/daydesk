@@ -106,6 +106,17 @@ class DaydeskTests(unittest.TestCase):
                 with self.assertRaises(ValueError): daydesk.run(daydesk.parser().parse_args(['settings',*options]))
             control.assert_not_called()
 
+    def test_sidebar_visibility_cli_and_saved_status(self):
+        for mode in ('on','off'):
+            with patch.object(daydesk,'control',return_value={}) as control:
+                daydesk.run(daydesk.parser().parse_args(['settings','--todo-visible',mode]))
+                control.assert_called_once_with({'op':'settings','todo_visible':mode=='on'},launch=True)
+        with patch.object(daydesk,'control') as control:
+            with self.assertRaises(ValueError): daydesk.run(daydesk.parser().parse_args(['settings','--recommended','--todo-visible','off']))
+            control.assert_not_called()
+        with patch.object(daydesk,'rpc',side_effect=FileNotFoundError),patch.object(daydesk,'saved',return_value={'todo_visible':False}),patch.object(daydesk,'startup',return_value={}):
+            self.assertFalse(daydesk.run(daydesk.parser().parse_args(['status']))['todo_visible'])
+
 
 if __name__ == "__main__":
     unittest.main()

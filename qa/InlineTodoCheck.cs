@@ -85,6 +85,7 @@ static class InlineTodoCheck {
             fake.Calls.Enqueue((r,b)=> { Check(r.Method==HttpMethod.Post && r.RequestUri.AbsolutePath.EndsWith("/TodoItem"),"Add did not use Firebase TodoItem"); var fields=Fields(b); Check((string)((D)fields["content"])["stringValue"]==input.Text,"Inline content changed"); return new D { {"name","projects/mate-914f3/databases/(default)/documents/TodoItem/created-task"},{"fields",fields} }; });
             Await(Call(panel,"SaveInline",true)); Check(input.Text=="" && Field(panel,"inlineInput")==input,"Enter did not keep an empty row for the next task"); Check(fake.Calls.Count==0,"Add request sequence incomplete");
             input.Text="취소할 내용";
+            Check(!(bool)Call(window,"SetTodoVisible",false) && input.Text=="취소할 내용" && input.IsKeyboardFocused,"Hiding the sidebar discarded an active draft");
             input.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(window),0,Key.Escape) { RoutedEvent=UIElement.PreviewKeyDownEvent }); Pump();
             Check(Field(panel,"inlineInput")==null && fake.Calls.Count==0,"Escape saved or lost the cancelled draft state");
             Check((GetWindowLongPtr(new System.Windows.Interop.WindowInteropHelper(window).Handle,-20).ToInt64()&0x08000000L)!=0,"Closing inline input left the widget activatable");
