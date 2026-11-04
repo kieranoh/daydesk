@@ -43,6 +43,7 @@ public partial class CalendarWindow : Window {
     readonly ComboBox calendars = new ComboBox();
     readonly DispatcherTimer autosync = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
     readonly DispatcherTimer saveDelay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+    readonly DispatcherTimer frontCheck = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
     readonly TextBlock brand = Text("TimeTree", 20, true);
     readonly string python;
     readonly bool live;
@@ -73,6 +74,8 @@ public partial class CalendarWindow : Window {
     [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr window,int index);
     [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")] static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
     [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr window,uint flags);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr window,uint command);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [StructLayout(LayoutKind.Sequential)] struct WindowPosition { internal IntPtr Window,After; internal int X,Y,Width,Height; internal uint Flags; }
     void UpdateBackActivation() {
         bool suppress=pinBack && !temporaryFront && (todoPanel==null || !todoPanel.HasInlineEditor);
@@ -83,19 +86,30 @@ public partial class CalendarWindow : Window {
         SetWindowLongPtr(handle,-20,new IntPtr(suppress ? style|0x08000000L : style&~0x08000000L));
     }
     internal void InlineInputChanged(bool focus) { UpdateBackActivation(); if(focus) Activate(); else PlaceBehind(); }
-    void ShowTemporaryFront() {
-        temporaryFront=true; UpdateBackActivation();
+    bool IsOwnWindow(IntPtr window) {
+        var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        // WPF's hidden root owner can sit above this window, so stop at the actual widget.
+        for(var current=GetAncestor(window,2);current!=IntPtr.Zero;current=GetWindow(current,4)) if(current==handle) return true;
+        return false;
+    }
+    void ShowTemporaryFront(bool activate=false) {
+        temporaryFront=true; UpdateBackActivation(); frontCheck.Start();
         if(WindowState==WindowState.Minimized) WindowState=WindowState.Normal;
         SetWindowPos(new System.Windows.Interop.WindowInteropHelper(this).Handle,IntPtr.Zero,0,0,0,0,KeepPositionNoActivate);
-        Activate();
+        if(activate) Activate();
+    }
+    void ReturnBehindIfInactive(IntPtr foreground) {
+        if(!temporaryFront || closing) return;
+        if(foreground==IntPtr.Zero || IsOwnWindow(foreground)) return;
+        temporaryFront=false; frontCheck.Stop(); UpdateBackActivation(); PlaceBehind();
     }
     IntPtr BackWindowMessage(IntPtr window,int message,IntPtr wParam,IntPtr lParam,ref bool handled) {
         if(!pinBack || closing) return IntPtr.Zero;
         // Taskbar and Alt+Tab explicitly activate even a WS_EX_NOACTIVATE window.
-        if(!temporaryFront && message==0x0006 && (wParam.ToInt64()&0xffff)==1 && !todoPanel.HasInlineEditor && GetAncestor(lParam,3)!=window && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
+        if(!temporaryFront && message==0x0006 && (wParam.ToInt64()&0xffff)==1 && !todoPanel.HasInlineEditor && !IsOwnWindow(lParam) && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
             ShowTemporaryFront();
         }
-        if(!temporaryFront && message==0x0112 && ((wParam.ToInt64()&0xfff0)==0xf020 || (wParam.ToInt64()&0xfff0)==0xf120) && !todoPanel.HasInlineEditor && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) { ShowTemporaryFront(); handled=true; return IntPtr.Zero; }
+        if(!temporaryFront && message==0x0112 && ((wParam.ToInt64()&0xfff0)==0xf020 || (wParam.ToInt64()&0xfff0)==0xf120) && !todoPanel.HasInlineEditor && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) { ShowTemporaryFront(true); handled=true; return IntPtr.Zero; }
         if(temporaryFront) return IntPtr.Zero;
         if(message==0x0021 && (todoPanel==null || !todoPanel.HasInlineEditor)) { handled=true; return new IntPtr(3); } // MA_NOACTIVATE keeps the click usable.
         if(message==0x0046 && !OwnedWindows.Cast<Window>().Any(w=>w.IsVisible)) {
@@ -113,7 +127,7 @@ public partial class CalendarWindow : Window {
     }
     void SetWindowLayer(bool above,bool below) {
         if(above && below) throw new ArgumentException("항상 위와 가장 뒤 고정은 동시에 켤 수 없습니다.");
-        bool wasBack=pinBack; pinBack=below; temporaryFront=false; UpdateBackActivation(); Topmost=above;
+        bool wasBack=pinBack; pinBack=below; temporaryFront=false; frontCheck.Stop(); UpdateBackActivation(); Topmost=above;
         if(backSwitch!=null) backSwitch.IsChecked=below;
         if(wasBack && !below && IsLoaded) {
             var handle=new System.Windows.Interop.WindowInteropHelper(this).Handle;
@@ -292,12 +306,10 @@ public partial class CalendarWindow : Window {
             if(!CanClose()) { e.Cancel=true; status.Text="할 일 저장을 마친 뒤 종료해 주세요."; }
         };
         Activated += delegate { todoPanel.RefreshAfterBrowser(); };
-        Deactivated+=delegate { Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(delegate {
-            if(!temporaryFront || IsActive || OwnedWindows.Cast<Window>().Any(w=>w.IsActive)) return;
-            temporaryFront=false; UpdateBackActivation(); PlaceBehind();
-        })); };
+        Deactivated+=delegate { Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(delegate { ReturnBehindIfInactive(GetForegroundWindow()); })); };
+        frontCheck.Tick+=delegate { ReturnBehindIfInactive(GetForegroundWindow()); };
         Loaded+=delegate { PlaceBehind(); };
-        Closed += delegate { closing=true; if(commands!=null) commands.Dispose(); autosync.Stop(); saveDelay.Stop(); Save(); todoPanel.Dispose(); StopBackend(); };
+        Closed += delegate { closing=true; if(commands!=null) commands.Dispose(); autosync.Stop(); frontCheck.Stop(); saveDelay.Stop(); Save(); todoPanel.Dispose(); StopBackend(); };
         SetTransparency(backgroundTransparency); UpdatePeriod(); ShowSelectedTodos();
         EnsureRecommended();
         if(connect) { Loaded += delegate { RestoreCalendarList(); Refresh(); autosync.Start(); commands=new WidgetCommands(Dispatcher,HandleCommand,Close); if(ShouldPromptForAccounts) Dispatcher.BeginInvoke(new Action(()=>ShowSettings(true))); }; }
